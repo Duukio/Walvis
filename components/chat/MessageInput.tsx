@@ -41,28 +41,25 @@ export default function MessageInput({ channelId }: { channelId: string }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-const handleSend = async () => {
-  const trimmed = content.trim()
-  console.log('trimmed:', trimmed)
-  console.log('attachments:', JSON.stringify(attachments))
-  if ((!trimmed && attachments.length === 0) || sending) return
+  const handleSend = async () => {
+    const trimmed = content.trim()
+    if ((!trimmed && attachments.length === 0) || sending) return
 
-  setSending(true)
+    setSending(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSending(false); return }
 
-  await fetch('/api/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    await supabase.from('messages').insert({
       channel_id: channelId,
+      user_id: user.id,
       content: trimmed || '',
       attachments: attachments.length > 0 ? attachments : null,
-    }),
-  })
+    })
 
-  setContent('')
-  setAttachments([])
-  setSending(false)
-}
+    setContent('')
+    setAttachments([])
+    setSending(false)
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -120,10 +117,19 @@ const handleSend = async () => {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
-  const fetchGifs = (offset: number) =>
-    giphySearch
-      ? gf.search(giphySearch, { offset, limit: 10 })
-      : gf.trending({ offset, limit: 10 })
+const fetchGifs = async (offset: number) => {
+  try {
+    const res = giphySearch
+      ? await gf.search(giphySearch, { offset, limit: 10 })
+      : await gf.trending({ offset, limit: 10 })
+
+    console.log('GIPHY RESPONSE:', res)
+    return res
+  } catch (err) {
+    console.error('GIPHY ERROR:', err)
+    return { data: [] }
+  }
+}
 
   return (
     <div className="px-4 pb-4 pt-2 relative">
