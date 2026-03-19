@@ -46,15 +46,21 @@ export default function MessageInput({ channelId }: { channelId: string }) {
     if ((!trimmed && attachments.length === 0) || sending) return
 
     setSending(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setSending(false); return }
 
-    await supabase.from('messages').insert({
-      channel_id: channelId,
-      user_id: user.id,
-      content: trimmed || '',
-      attachments: attachments.length > 0 ? attachments : null,
+    const res = await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channel_id: channelId,
+        content: trimmed || '',
+        attachments: attachments.length > 0 ? attachments : null,
+      }),
     })
+
+    if (!res.ok) {
+      const data = await res.json()
+      console.error('Error enviando mensaje:', data.error)
+    }
 
     setContent('')
     setAttachments([])
@@ -117,24 +123,14 @@ export default function MessageInput({ channelId }: { channelId: string }) {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
-const fetchGifs = async (offset: number) => {
-  try {
-    const res = giphySearch
-      ? await gf.search(giphySearch, { offset, limit: 10 })
-      : await gf.trending({ offset, limit: 10 })
-
-    console.log('GIPHY RESPONSE:', res)
-    return res
-  } catch (err) {
-    console.error('GIPHY ERROR:', err)
-    return { data: [] }
-  }
-}
+  const fetchGifs = (offset: number) =>
+    giphySearch
+      ? gf.search(giphySearch, { offset, limit: 10 })
+      : gf.trending({ offset, limit: 10 })
 
   return (
     <div className="px-4 pb-4 pt-2 relative">
 
-      {/* Panel de emojis */}
       {showEmoji && (
         <div id="emoji-panel" className="absolute bottom-full mb-2 left-4 z-50">
           <EmojiPicker onSelect={(emoji) => {
@@ -144,7 +140,6 @@ const fetchGifs = async (offset: number) => {
         </div>
       )}
 
-      {/* Panel de GIFs */}
       {showGiphy && (
         <div id="giphy-panel" className="absolute bottom-full mb-2 left-4 z-50 bg-gray-800 rounded-xl shadow-xl border border-gray-700 w-80 overflow-hidden">
           <div className="p-2 border-b border-gray-700">
@@ -176,7 +171,6 @@ const fetchGifs = async (offset: number) => {
         </div>
       )}
 
-      {/* Preview de adjuntos */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">
           {attachments.map((att, i) => (
@@ -206,7 +200,6 @@ const fetchGifs = async (offset: number) => {
         </div>
       )}
 
-      {/* Input principal */}
       <div className="flex items-center gap-2 bg-gray-600 rounded-lg px-3 py-2">
         <button
           onClick={() => fileInputRef.current?.click()}
