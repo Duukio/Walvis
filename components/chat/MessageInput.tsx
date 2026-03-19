@@ -109,15 +109,29 @@ export default function MessageInput({ channelId }: { channelId: string }) {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const handleGifSelect = (gif: any) => {
-    setAttachments(prev => [...prev, {
-      type: 'gif',
-      url: gif.images.fixed_height.url,
-      name: gif.title,
-    }])
-    setShowGiphy(false)
-    setGiphySearch('')
+const handleGifSelect = async (gif: any) => {
+  const gifAttachment: Attachment = {
+    type: 'gif',
+    url: gif.images.fixed_height.url,
+    name: gif.title,
   }
+  
+  setShowGiphy(false)
+  setGiphySearch('')
+  setSending(true)
+
+  await fetch('/api/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      channel_id: channelId,
+      content: '',
+      attachments: [gifAttachment],
+    }),
+  })
+
+  setSending(false)
+}
 
   const removeAttachment = (index: number) => {
     setAttachments(prev => prev.filter((_, i) => i !== index))
