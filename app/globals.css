@@ -12,11 +12,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: #374151;
+  --foreground: #ededed;
 }
 
 body {
@@ -24,3 +22,60 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Override controles de Stream */
+.str-video__call-controls {
+  background-color: #4b5563 !important;
+  border-radius: 12px !important;
+  padding: 8px 16px !important;
+}
+
+.str-video__call-controls__button {
+  background-color: #6b7280 !important;
+  color: white !important;
+  border-radius: 50% !important;
+}
+
+.str-video__call-controls__button:hover {
+  background-color: #9ca3af !important;
+}
+
+.str-video__call-controls__button--danger {
+  background-color: #ef4444 !important;
+}
+
+.str-video__call-controls__button--danger:hover {
+  background-color: #dc2626 !important;
+}
+
+.str-video__icon {
+  color: white !important;
+  fill: white !important;
+}
+
+.light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f2f3f5;
+  --bg-tertiary: #e3e5e8;
+  --text-primary: #060607;
+  --text-secondary: #4e5058;
+}
+
+.light .bg-gray-900 { background-color: #d4d7dc !important; }
+.light .bg-gray-800 { background-color: #dde0e6 !important; }
+.light .bg-gray-700 { background-color: #e8eaed !important; }
+.light .bg-gray-600 { background-color: #f0f2f5 !important; }
+.light .bg-gray-600\/50 { background-color: rgba(240, 242, 245, 0.5) !important; }
+.light .bg-gray-600\/30 { background-color: rgba(240, 242, 245, 0.3) !important; }
+.light .hover\:bg-gray-700:hover { background-color: #dde0e6 !important; }
+.light .hover\:bg-gray-600:hover { background-color: #e8eaed !important; }
+.light .text-white { color: #060607 !important; }
+.light .text-gray-200 { color: #1e1f22 !important; }
+.light .text-gray-300 { color: #2e3035 !important; }
+.light .text-gray-400 { color: #4e5058 !important; }
+.light .text-gray-500 { color: #6d6f78 !important; }
+.light .border-gray-900 { border-color: #b8bcc5 !important; }
+.light .border-gray-700 { border-color: #c7cad1 !important; }
+.light .border-gray-600 { border-color: #d4d7dc !important; }
+.light .bg-indigo-600 { background-color: #5865f2 !important; }
+.light .bg-gray-700\/30 { background-color: rgba(221, 224, 230, 0.3) !important; }
