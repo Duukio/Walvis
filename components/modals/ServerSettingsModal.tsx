@@ -92,7 +92,7 @@ export default function ServerSettingsModal({
       .eq('server_id', serverId)
 
     if (membersData) {
-      setMembers(membersData as Member[])
+      setMembers(membersData as unknown as Member[])
       const me = membersData.find(m => m.user_id === user.id)
       setCurrentUserRole(me?.role ?? '')
     }
