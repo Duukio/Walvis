@@ -43,6 +43,7 @@ export default function MessageInput({ channelId }: { channelId: string }) {
 
 const handleSend = async () => {
   const trimmed = content.trim()
+  console.log('attachments:', attachments)
   if ((!trimmed && attachments.length === 0) || sending) return
 
   setSending(true)
