@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { UserPlus, Check, X, UserMinus, Users, Clock } from 'lucide-react'
+import { UserPlus, Check, X, UserMinus, Users, Clock,MessageCircle } from 'lucide-react'
 import Image from 'next/image'
 import StatusIndicator from '@/components/ui/StatusIndicator'
+import { useRouter } from 'next/navigation'
 
 type Friendship = {
   id: string
@@ -39,6 +40,7 @@ export default function HomePage() {
   const [addError, setAddError] = useState<string | null>(null)
   const [addSuccess, setAddSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
     const init = async () => {
@@ -376,7 +378,13 @@ export default function HomePage() {
                             {friend.username}
                           </p>
                           <p className="text-xs text-gray-400 capitalize">{friend.status}</p>
-                        </div>
+                        </div> 
+                        <button onClick={() => router.push(`/home/dm/${friend.id}`)} 
+                        className="p-1.5 text-gray-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded transition-colors opacity-0 group-hover:opacity-100"
+                        title="Mensaje directo">
+                        <MessageCircle size={16} />
+</button>
+                        
 
                         <button
                           onClick={() => handleRemove(f.id)}
