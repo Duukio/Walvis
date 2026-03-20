@@ -55,7 +55,7 @@ export default function NotificationBell() {
       </button>
 
       {showPanel && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 bg-gray-900 rounded-lg shadow-xl border border-gray-700 overflow-hidden z-50">
+        <div className="absolute top-full right-0 mt-2 bg-gray-900 rounded-lg shadow-xl border border-gray-700 overflow-hidden z-50 w-80">
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
             <span className="text-white text-sm font-semibold">Notificaciones</span>
