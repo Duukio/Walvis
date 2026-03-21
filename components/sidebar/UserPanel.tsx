@@ -12,6 +12,7 @@ type Profile = {
   username: string
   avatar_url: string | null
   status: string
+  banner_url: string | null
 }
 
 type Status = 'online' | 'away' | 'dnd' | 'invisible'
@@ -56,7 +57,7 @@ export default function UserPanel() {
 
     const { data } = await supabase
       .from('profiles')
-      .select('username, avatar_url, status')
+      .select('username, avatar_url, status, banner_url')
       .eq('id', user.id)
       .single()
 
@@ -139,68 +140,103 @@ export default function UserPanel() {
     router.refresh()
   }
 
+  const bannerInputRef = useRef<HTMLInputElement>(null)
+
+const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0]
+  if (!file || !userId) return
+
+  if (file.size > 5 * 1024 * 1024) { alert('Máximo 5MB'); return }
+  if (!file.type.startsWith('image/')) { alert('Solo imágenes'); return }
+
+  setUploading(true)
+  const ext = file.name.split('.').pop()
+  const path = `${userId}/banner.${ext}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('backgrounds')
+    .upload(path, file, { upsert: true })
+
+  if (!uploadError) {
+    const { data: { publicUrl } } = supabase.storage
+      .from('backgrounds')
+      .getPublicUrl(path)
+
+    await supabase
+      .from('profiles')
+      .update({ banner_url: publicUrl })
+      .eq('id', userId)
+
+    setProfile((prev) => prev ? { ...prev, banner_url: publicUrl } : prev)
+  }
+
+  setUploading(false)
+  if (bannerInputRef.current) bannerInputRef.current.value = ''
+}
+
+
   const currentStatus = STATUS_OPTIONS.find((s) => s.value === status) ?? STATUS_OPTIONS[0]
 
   return (
     <aside className="w-60 bg-gray-800 border-l border-gray-900 flex flex-col shrink-0">
-      {/* Header */}
-      <div className="h-12 px-4 flex items-center border-b border-gray-900">
-        <span className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
-          Mi perfil
-        </span>
+      {/* Banner */}
+      <div
+        className="relative h-20 shrink-0 cursor-pointer group overflow-hidden"
+        style={{
+          backgroundColor: '#312e81',
+          backgroundImage: profile?.banner_url ? `url(${profile.banner_url})` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+        onClick={() => bannerInputRef.current?.click()}
+      >
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          <Camera size={20} className="text-white" />
+        </div>
+        <input
+          ref={bannerInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleBannerChange}
+          className="hidden"
+        />
       </div>
 
-      <div className="flex flex-col items-center pt-8 px-4 gap-4" ref={menuRef}>
-        {/* Avatar con botón de cambio */}
-        <div className="relative group">
+      {/* Avatar sobre el banner */}
+      <div className="px-4 pb-2 relative">
+        <div className="relative -mt-8 w-16 h-16 group inline-block">
           <div
+            className="w-full h-full rounded-full overflow-hidden border-4 border-gray-800 cursor-pointer relative"
             onClick={handleAvatarClick}
-            className="w-20 h-20 rounded-full overflow-hidden cursor-pointer relative"
           >
             {profile?.avatar_url ? (
               <Image
                 src={profile.avatar_url}
                 alt="Avatar"
-                width={80}
-                height={80}
+                width={64}
+                height={64}
                 className="object-cover w-full h-full"
               />
             ) : (
-              <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-2xl font-bold text-white select-none">
+              <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xl font-bold text-white select-none">
                 {profile?.username?.slice(0, 2).toUpperCase() ?? '??'}
               </div>
             )}
-
-            {/* Overlay al hover */}
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              {uploading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Camera size={20} className="text-white" />
-              )}
+              {uploading
+                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <Camera size={16} className="text-white" />
+              }
             </div>
           </div>
-
-          {/* Indicador de estado */}
-          <span
-            className={`absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-gray-800 ${currentStatus.color}`}
-          />
-
-          {/* Input oculto */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleAvatarChange}
-            className="hidden"
-          />
+          <span className={`absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full border-2 border-gray-800 ${currentStatus.color}`} />
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
         </div>
 
-        {/* Nombre */}
-        <div className="text-center">
-          <p className="text-white font-semibold">{profile?.username ?? '...'}</p>
-        </div>
+        <p className="text-white font-semibold mt-2">{profile?.username ?? '...'}</p>
+      </div>
 
+      <div className="flex flex-col px-4 gap-4" ref={menuRef}>
         {/* Selector de estado */}
         <div className="relative w-full">
           <button
@@ -233,14 +269,15 @@ export default function UserPanel() {
         </div>
 
         {/* Acciones */}
-        <div className="w-full flex flex-col gap-1 mt-2">
-            <NotificationBell />
-      <button
-        onClick={() => router.push('/settings')}
-        className="w-full flex items-center gap-3 px-3 py-2 rounded text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-        ><Settings size={16} />
-        Ajustes
-        </button>
+        <div className="w-full flex flex-col gap-1">
+          <NotificationBell />
+          <button
+            onClick={() => router.push('/settings')}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+          >
+            <Settings size={16} />
+            Ajustes
+          </button>
 
           <button
             onClick={() => {}}
