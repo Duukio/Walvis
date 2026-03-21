@@ -262,8 +262,8 @@ const handleChatBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
   if (!file.type.startsWith('image/')) { alert('Solo imágenes'); return }
 
   setUploading(true)
-  const ext = file.name.split('.').pop()
-  const path = `${serverId}/chat-bg.${ext}`
+ const ext = file.name.split('.').pop()
+ const path = `${serverId}/chat-bg-${Date.now()}.${ext}`
 
   const { error: uploadError } = await supabase.storage
     .from('backgrounds')
