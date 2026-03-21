@@ -31,22 +31,24 @@ export default function VoiceChannel({
   useEffect(() => {
     if (!client || joinedRef.current) return
 
-    const joinCall = async () => {
-      joinedRef.current = true
-      setLoading(true)
-      try {
-        const callInstance = client.call('default', channelId)
-        await callInstance.join({ create: true })
-        setCall(callInstance)
-      } catch (err) {
-        console.error('Error al unirse al canal:', err)
-        joinedRef.current = false
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    joinCall()
+const joinCall = async () => {
+  joinedRef.current = true
+  setLoading(true)
+  try {
+    const callInstance = client.call('default', channelId)
+    await callInstance.join({ create: true })
+    
+    // Habilitar micrófono y audio al entrar
+    await callInstance.microphone.enable()
+    
+    setCall(callInstance)
+  } catch (err) {
+    console.error('Error al unirse al canal:', err)
+    joinedRef.current = false
+  } finally {
+    setLoading(false)
+  }
+}
 
     return () => {
       if (joinedRef.current) {
