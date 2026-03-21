@@ -31,24 +31,22 @@ export default function VoiceChannel({
   useEffect(() => {
     if (!client || joinedRef.current) return
 
-const joinCall = async () => {
-  joinedRef.current = true
-  setLoading(true)
-  try {
-    const callInstance = client.call('default', channelId)
-    await callInstance.join({ create: true })
-    
-    // Habilitar micrófono y audio al entrar
-    await callInstance.microphone.enable()
-    
-    setCall(callInstance)
-  } catch (err) {
-    console.error('Error al unirse al canal:', err)
-    joinedRef.current = false
-  } finally {
-    setLoading(false)
-  }
-}
+    const joinCall = async () => {
+      joinedRef.current = true
+      setLoading(true)
+      try {
+      const callInstance = client.call('default', channelId)
+      await callInstance.join({ create: true })
+        setCall(callInstance)
+      } catch (err) {
+        console.error('Error al unirse al canal:', err)
+        joinedRef.current = false
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    joinCall()
 
     return () => {
       if (joinedRef.current) {
@@ -183,49 +181,50 @@ function VoiceCallUI({
         ) : (
           <div className="flex flex-col gap-2">
             {participants.map((participant) => {
-              const isMicMuted = !participant.publishedTracks?.includes(2)
-              return (
-                <div
-                  key={participant.sessionId}
-                  className="flex items-center gap-3 px-3 py-2 rounded bg-gray-600/50"
-                >
-                  {/* Avatar con anillo */}
-                  <div className={`relative w-10 h-10 rounded-full shrink-0 transition-all duration-200 ${
-                    participant.isSpeaking
-                      ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-gray-600'
-                      : 'ring-2 ring-transparent'
-                  }`}>
-                    {participant.image ? (
-                      <Image
-                        src={participant.image}
-                        alt={participant.name ?? 'Usuario'}
-                        width={40}
-                        height={40}
-                        className="object-cover w-full h-full rounded-full"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-sm font-bold text-white rounded-full">
-                        {participant.name?.slice(0, 2).toUpperCase() ?? '??'}
-                      </div>
-                    )}
-                  </div>
+  const isMicMuted = !participant.publishedTracks?.includes(2)
+  return (
+    <div key={participant.sessionId}>
+      {/* ParticipantView oculto para reproducir el audio */}
+      <div className="hidden">
+        <ParticipantView participant={participant} />
+      </div>
 
-                  {/* Nombre */}
-                  <span className="text-gray-200 text-sm flex-1">
-                    {participant.name ?? 'Usuario'}
-                  </span>
+      <div className="flex items-center gap-3 px-3 py-2 rounded bg-gray-600/50">
+        <div className={`relative w-10 h-10 rounded-full shrink-0 transition-all duration-200 ${
+          participant.isSpeaking
+            ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-gray-600'
+            : 'ring-2 ring-transparent'
+        }`}>
+          {participant.image ? (
+            <Image
+              src={participant.image}
+              alt={participant.name ?? 'Usuario'}
+              width={40}
+              height={40}
+              className="object-cover w-full h-full rounded-full"
+            />
+          ) : (
+            <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-sm font-bold text-white rounded-full">
+              {participant.name?.slice(0, 2).toUpperCase() ?? '??'}
+            </div>
+          )}
+        </div>
 
-                  {/* Indicador mic */}
-                  <div className={`w-2.5 h-2.5 rounded-full transition-colors duration-200 ${
-                    participant.isSpeaking
-                      ? 'bg-green-400 animate-pulse'
-                      : isMicMuted
-                      ? 'bg-red-500'
-                      : 'bg-gray-500'
-                  }`} />
-                </div>
-              )
-            })}
+        <span className="text-gray-200 text-sm flex-1">
+          {participant.name ?? 'Usuario'}
+        </span>
+
+        <div className={`w-2.5 h-2.5 rounded-full transition-colors duration-200 ${
+          participant.isSpeaking
+            ? 'bg-green-400 animate-pulse'
+            : isMicMuted
+            ? 'bg-red-500'
+            : 'bg-gray-500'
+        }`} />
+      </div>
+    </div>
+  )
+})}
 
             {participants.length === 0 && (
               <div className="text-center text-gray-400 text-sm mt-8">
