@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { X, Plus, Trash2, Save, ChevronUp, ChevronDown } from 'lucide-react
+import { X, Plus, Trash2, Save, ChevronUp, ChevronDown } from 'lucide-react'
 
 type Permission = {
   view_channels: boolean
