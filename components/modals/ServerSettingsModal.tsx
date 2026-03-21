@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { X, Camera, Save, Trash2, Shield, UserMinus, Ban, Loader2, ChevronDown } from 'lucide-react'
 import Image from 'next/image'
+import RolesEditor from '@/components/modals/RolesEditor'
 
 type Member = {
   user_id: string
@@ -22,6 +23,13 @@ type Server = {
   icon_url: string | null
   owner_id: string
   invite_code: string | null
+}
+
+type Role = {
+  id: string
+  name: string
+  color: string | null
+  position: number
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -50,12 +58,14 @@ export default function ServerSettingsModal({
   const [iconUrl, setIconUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'general' | 'members'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'roles'>('general')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteName, setDeleteName] = useState('')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [serverRoles, setServerRoles] = useState<any[]>([])
+  const [memberRoles, setMemberRoles] = useState<Record<string, string[]>>({})
 
   useEffect(() => {
     fetchData()
@@ -65,6 +75,28 @@ export default function ServerSettingsModal({
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     setCurrentUserId(user.id)
+
+const { data: rolesData } = await supabase
+  .from('roles')
+  .select('id, name, color, position')  
+  .eq('server_id', serverId)
+  .order('position', { ascending: false })
+
+if (rolesData) setServerRoles(rolesData)
+
+const { data: memberRolesData } = await supabase
+  .from('member_roles')
+  .select('user_id, role_id')
+  .eq('server_id', serverId)
+
+if (memberRolesData) {
+  const map: Record<string, string[]> = {}
+  for (const mr of memberRolesData) {
+    if (!map[mr.user_id]) map[mr.user_id] = []
+    map[mr.user_id].push(mr.role_id)
+  }
+  setMemberRoles(map)
+}
 
     const { data: serverData } = await supabase
       .from('servers')
@@ -187,11 +219,36 @@ const handleSave = async () => {
     setActionLoading(null)
   }
 
+  const addRoleToMember = async (memberId: string, roleId: string) => {
+  await fetch(`/api/servers/${serverId}/members/${memberId}/roles`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role_id: roleId }),
+  })
+  setMemberRoles(prev => ({
+    ...prev,
+    [memberId]: [...(prev[memberId] ?? []), roleId],
+  }))
+}
+
+const removeRoleFromMember = async (memberId: string, roleId: string) => {
+  await fetch(`/api/servers/${serverId}/members/${memberId}/roles`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role_id: roleId }),
+  })
+  setMemberRoles(prev => ({
+    ...prev,
+    [memberId]: (prev[memberId] ?? []).filter(id => id !== roleId),
+  }))
+}
+
   const canManage = ['owner', 'admin'].includes(currentUserRole)
 
   const tabs = [
     { id: 'general', label: 'General' },
     { id: 'members', label: `Miembros (${members.length})` },
+    { id: 'roles', label: 'Roles' },
   ] as const
 
   
@@ -363,97 +420,90 @@ const handleSave = async () => {
           )}
 
           {/* Tab Miembros */}
-          {activeTab === 'members' && (
-            <div className="flex flex-col gap-2">
-              {members.map((member) => {
-                const isMe = member.user_id === currentUserId
-                const isOwner = member.role === 'owner'
-                const canAct = canManage && !isMe && !isOwner
+          {/* Tab Miembros */}
+{activeTab === 'members' && (
+  <div className="flex flex-col gap-3">
+    {members.map((member) => {
+      const isMe = member.user_id === currentUserId
+      const isOwner = member.role === 'owner'
+      const canAct = canManage && !isMe && !isOwner
 
+      return (
+        <div
+          key={member.user_id}
+          className="flex flex-col gap-2 px-3 py-2 rounded bg-gray-700/50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
+              {member.profiles.avatar_url ? (
+                <Image src={member.profiles.avatar_url} alt={member.profiles.username} width={32} height={32} className="object-cover w-full h-full" />
+              ) : (
+                <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+                  {member.profiles.username.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+            </div>
+
+            <span className="flex-1 text-sm font-medium truncate" style={{ color: member.profiles.nickname_color ?? '#ffffff' }}>
+              {member.profiles.username}
+              {isMe && <span className="text-gray-400 ml-1">(tú)</span>}
+            </span>
+
+            {canAct ? (
+              <select
+                value={member.role}
+                onChange={(e) => handleRoleChange(member.user_id, e.target.value)}
+                className="bg-gray-800 text-gray-300 text-xs px-2 py-1 rounded border border-gray-600"
+              >
+                <option value="member">Miembro</option>
+                <option value="admin">Admin</option>
+              </select>
+            ) : (
+              <span className="text-xs px-2 py-1 rounded bg-gray-600/50 text-gray-400">
+                {member.role}
+              </span>
+            )}
+
+            {canAct && (
+              <div className="flex items-center gap-1">
+                <button onClick={() => handleKick(member.user_id)} className="p-1.5 text-gray-400 hover:text-yellow-400">
+                  <UserMinus size={14} />
+                </button>
+                <button onClick={() => handleBan(member.user_id)} className="p-1.5 text-gray-400 hover:text-red-400">
+                  <Ban size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {serverRoles.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {serverRoles.map((role) => {
+                const hasRole = memberRoles[member.user_id]?.includes(role.id)
                 return (
-                  <div
-                    key={member.user_id}
-                    className="flex items-center gap-3 px-3 py-2 rounded bg-gray-700/50"
+                  <button
+                    key={role.id}
+                    onClick={() => hasRole ? removeRoleFromMember(member.user_id, role.id) : addRoleToMember(member.user_id, role.id)}
+                    className={`text-xs px-2 py-0.5 rounded-full border ${hasRole ? 'text-white' : 'border-gray-600 text-gray-400'}`}
+                    style={hasRole ? { backgroundColor: role.color } : {}}
                   >
-                    {/* Avatar */}
-                    <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
-                      {member.profiles.avatar_url ? (
-                        <Image
-                          src={member.profiles.avatar_url}
-                          alt={member.profiles.username}
-                          width={32}
-                          height={32}
-                          className="object-cover w-full h-full"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-                          {member.profiles.username.slice(0, 2).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Nombre */}
-                    <span
-                      className="flex-1 text-sm font-medium truncate"
-                      style={{ color: member.profiles.nickname_color ?? '#ffffff' }}
-                    >
-                      {member.profiles.username}
-                      {isMe && <span className="text-gray-400 font-normal ml-1">(tú)</span>}
-                    </span>
-
-                    {/* Rol */}
-                    {canAct ? (
-                      <select
-                        value={member.role}
-                        onChange={(e) => handleRoleChange(member.user_id, e.target.value)}
-                        disabled={actionLoading === `role-${member.user_id}`}
-                        className="bg-gray-800 text-gray-300 text-xs px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-indigo-500"
-                      >
-                        <option value="member">Miembro</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    ) : (
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        isOwner ? 'bg-yellow-500/20 text-yellow-400' :
-                        member.role === 'admin' ? 'bg-indigo-500/20 text-indigo-400' :
-                        'bg-gray-600/50 text-gray-400'
-                      }`}>
-                        {ROLE_LABELS[member.role] ?? member.role}
-                      </span>
-                    )}
-
-                    {/* Acciones */}
-                    {canAct && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleKick(member.user_id)}
-                          disabled={!!actionLoading}
-                          className="p-1.5 text-gray-400 hover:text-yellow-400 transition-colors rounded hover:bg-gray-600"
-                          title="Kickear"
-                        >
-                          {actionLoading === member.user_id
-                            ? <Loader2 size={14} className="animate-spin" />
-                            : <UserMinus size={14} />
-                          }
-                        </button>
-                        <button
-                          onClick={() => handleBan(member.user_id)}
-                          disabled={!!actionLoading}
-                          className="p-1.5 text-gray-400 hover:text-red-400 transition-colors rounded hover:bg-gray-600"
-                          title="Banear"
-                        >
-                          {actionLoading === `ban-${member.user_id}`
-                            ? <Loader2 size={14} className="animate-spin" />
-                            : <Ban size={14} />
-                          }
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                    {role.name}
+                  </button>
                 )
               })}
             </div>
           )}
+        </div>
+      )
+    })}
+  </div>
+)}
+
+{/* Tab Roles */}
+{activeTab === 'roles' && (
+  <RolesEditor serverId={serverId} />
+)}
+
         </div>
       </div>
     </div>

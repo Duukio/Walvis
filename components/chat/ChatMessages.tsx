@@ -28,15 +28,43 @@ export default function ChatMessages({ channelId }: { channelId: string }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentUsername, setCurrentUsername] = useState<string>('')
+  const [currentUserRole, setCurrentUserRole] = useState<string>('member')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) setCurrentUserId(user.id)
+      if (!user) return
+      setCurrentUserId(user.id)
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', user.id)
+        .single()
+
+      if (profile) setCurrentUsername(profile.username)
+
+      const { data: channel } = await supabase
+        .from('channels')
+        .select('server_id')
+        .eq('id', channelId)
+        .single()
+
+      if (channel) {
+        const { data: member } = await supabase
+          .from('members')
+          .select('role')
+          .eq('server_id', channel.server_id)
+          .eq('user_id', user.id)
+          .single()
+
+        if (member) setCurrentUserRole(member.role)
+      }
     }
     fetchUser()
-  }, [])
+  }, [channelId])
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -118,10 +146,7 @@ export default function ChatMessages({ channelId }: { channelId: string }) {
   }, [messages])
 
   const handleEdit = async (id: string, newContent: string) => {
-    await supabase
-      .from('messages')
-      .update({ content: newContent, edited: true })
-      .eq('id', id)
+    await supabase.from('messages').update({ content: newContent, edited: true }).eq('id', id)
   }
 
   const handleDelete = async (id: string) => {
@@ -151,6 +176,8 @@ export default function ChatMessages({ channelId }: { channelId: string }) {
           key={msg.id}
           message={msg}
           isOwn={msg.user_id === currentUserId}
+          canDelete={['owner', 'admin'].includes(currentUserRole)}
+          currentUsername={currentUsername}
           onEdit={handleEdit}
           onDelete={handleDelete}
         />
@@ -163,11 +190,15 @@ export default function ChatMessages({ channelId }: { channelId: string }) {
 function MessageItem({
   message,
   isOwn,
+  canDelete,
+  currentUsername,
   onEdit,
   onDelete,
 }: {
   message: Message
   isOwn: boolean
+  canDelete: boolean
+  currentUsername: string
   onEdit: (id: string, content: string) => void
   onDelete: (id: string) => void
 }) {
@@ -255,7 +286,7 @@ function MessageItem({
             </button>
           </div>
         ) : (
-          <p className="text-gray-200 text-sm break-words">{message.content}</p>
+          <MessageContent content={message.content} currentUsername={currentUsername} />
         )}
 
         {/* Adjuntos */}
@@ -272,8 +303,8 @@ function MessageItem({
                     onClick={() => window.open(att.url, '_blank')}
                   />
                 ) : (
-                  
-                  <a href={att.url}
+                  <a
+                    href={att.url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 bg-gray-600 rounded px-3 py-2 text-sm text-gray-200 hover:bg-gray-500 transition-colors"
@@ -289,16 +320,62 @@ function MessageItem({
       </div>
 
       {/* Botones de acción */}
-      {isOwn && showActions && !editing && (
+      {(isOwn || canDelete) && showActions && !editing && (
         <div className="absolute right-2 top-1 flex items-center gap-1 bg-gray-700 rounded shadow px-1 py-0.5">
-          <button onClick={() => setEditing(true)} className="p-1 text-gray-400 hover:text-white transition-colors" title="Editar">
-            <Pencil size={13} />
-          </button>
+          {isOwn && (
+            <button onClick={() => setEditing(true)} className="p-1 text-gray-400 hover:text-white transition-colors" title="Editar">
+              <Pencil size={13} />
+            </button>
+          )}
           <button onClick={() => onDelete(message.id)} className="p-1 text-gray-400 hover:text-red-400 transition-colors" title="Eliminar">
             <Trash2 size={13} />
           </button>
         </div>
       )}
     </div>
+  )
+}
+
+function MessageContent({
+  content,
+  currentUsername,
+}: {
+  content: string
+  currentUsername: string
+}) {
+  if (!content) return null
+
+  const parts = content.split(/(@everyone|@\w+)/g)
+
+  return (
+    <p className="text-gray-200 text-sm break-words">
+      {parts.map((part, i) => {
+        if (part === '@everyone') {
+          return (
+            <span key={i} className="bg-indigo-500/30 text-indigo-300 rounded px-0.5 font-medium">
+              @everyone
+            </span>
+          )
+        }
+
+        if (part.startsWith('@') && part.slice(1).toLowerCase() === currentUsername.toLowerCase()) {
+          return (
+            <span key={i} className="bg-indigo-500/30 text-indigo-300 rounded px-0.5 font-medium">
+              {part}
+            </span>
+          )
+        }
+
+        if (part.startsWith('@')) {
+          return (
+            <span key={i} className="text-indigo-400 font-medium">
+              {part}
+            </span>
+          )
+        }
+
+        return <span key={i}>{part}</span>
+      })}
+    </p>
   )
 }

@@ -16,18 +16,18 @@ type Member = {
   }
 }
 
-const ROLE_ORDER = { owner: 0, admin: 1, member: 2 }
 const ROLE_LABEL = { owner: 'Propietario', admin: 'Admin', member: 'Miembros' }
 
 export default function MemberList({ serverId }: { serverId: string }) {
   const supabase = createClient()
   const [members, setMembers] = useState<Member[]>([])
+  const [serverRoles, setServerRoles] = useState<{ id: string; name: string; color: string }[]>([])
+  const [memberRolesMap, setMemberRolesMap] = useState<Record<string, string[]>>({})
 
   useEffect(() => {
     if (!serverId) return
     fetchMembers()
 
-    // Realtime cuando alguien entra o sale
     const channel = supabase
       .channel(`members:${serverId}`)
       .on(
@@ -57,9 +57,32 @@ export default function MemberList({ serverId }: { serverId: string }) {
       .order('role')
 
     if (data) setMembers(data as unknown as Member[])
+
+    const { data: rolesData } = await supabase
+      .from('roles')
+      .select('id, name, color')
+      .eq('server_id', serverId)
+      .order('position', { ascending: false })
+
+      
+    if (rolesData) setServerRoles(rolesData)
+
+    const { data: memberRolesData } = await supabase
+      .from('member_roles')
+      .select('user_id, role_id')
+      .eq('server_id', serverId)
+
+
+    if (memberRolesData) {
+      const map: Record<string, string[]> = {}
+      for (const mr of memberRolesData) {
+        if (!map[mr.user_id]) map[mr.user_id] = []
+        map[mr.user_id].push(mr.role_id)
+      }
+      setMemberRolesMap(map)
+    }
   }
 
-  // Agrupar por rol
   const grouped = members.reduce((acc, member) => {
     const role = member.role as keyof typeof ROLE_LABEL
     if (!acc[role]) acc[role] = []
@@ -110,7 +133,6 @@ export default function MemberList({ serverId }: { serverId: string }) {
                           </div>
                         )}
                       </div>
-                      {/* Indicador de estado */}
                       <div className="absolute -bottom-0.5 -right-0.5 border-2 border-gray-800 rounded-full">
                         <StatusIndicator
                           userId={member.profiles.id}
@@ -120,20 +142,39 @@ export default function MemberList({ serverId }: { serverId: string }) {
                       </div>
                     </div>
 
-                    {/* Nombre */}
-                    <span
-                      className="text-sm truncate"
-                      style={{ color: member.profiles.nickname_color ?? '#9ca3af' }}
-                    >
-                      {member.profiles.username}
-                    </span>
+                    {/* Nombre y roles */}
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="text-sm truncate"
+                        style={{ color: member.profiles.nickname_color ?? '#9ca3af' }}
+                      >
+                        {member.profiles.username}
+                      </p>
+                      {memberRolesMap[member.profiles.id]?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {memberRolesMap[member.profiles.id].map((roleId) => {
+                            const r = serverRoles.find(sr => sr.id === roleId)
+                            if (!r) return null
+                            return (
+                              <span
+                                key={roleId}
+                                className="text-xs px-1.5 py-0.5 rounded-full text-white"
+                                style={{ backgroundColor: r.color }}
+                              >
+                                {r.name}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
 
-                    {/* Badge de rol */}
+                    {/* Badge de rol básico */}
                     {role === 'owner' && (
-                      <span className="ml-auto text-yellow-400 text-xs">👑</span>
+                        <span className="ml-auto text-xs px-1.5 py-0.5 rounded font-semibold shrink-0"style={{ backgroundColor: '#f59e0b20', color: '#f59e0b' }}></span>
                     )}
                     {role === 'admin' && (
-                      <span className="ml-auto text-indigo-400 text-xs">⚡</span>
+                      <span className="ml-auto text-xs px-1.5 py-0.5 rounded font-semibold shrink-0"style={{ backgroundColor: '#6366f120', color: '#6366f1' }}></span>
                     )}
                   </div>
                 ))}
