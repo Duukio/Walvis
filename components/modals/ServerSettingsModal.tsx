@@ -23,6 +23,7 @@ type Server = {
   icon_url: string | null
   owner_id: string
   invite_code: string | null
+  chat_bg_url: string | null
 }
 
 type Role = {
@@ -100,7 +101,7 @@ if (memberRolesData) {
 
     const { data: serverData } = await supabase
       .from('servers')
-      .select('id, name, icon_url, owner_id, invite_code')
+      .select('id, name, icon_url, owner_id, invite_code, chat_bg_url')
       .eq('id', serverId)
       .single()
 
@@ -251,6 +252,44 @@ const removeRoleFromMember = async (memberId: string, roleId: string) => {
     { id: 'roles', label: 'Roles' },
   ] as const
 
+  const chatBgInputRef = useRef<HTMLInputElement>(null)
+
+const handleChatBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0]
+  if (!file || !currentUserId) return
+
+  if (file.size > 5 * 1024 * 1024) { alert('Máximo 5MB'); return }
+  if (!file.type.startsWith('image/')) { alert('Solo imágenes'); return }
+
+  setUploading(true)
+  const ext = file.name.split('.').pop()
+  const path = `${serverId}/chat-bg.${ext}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('backgrounds')
+    .upload(path, file, { upsert: true })
+
+  if (!uploadError) {
+    const { data: { publicUrl } } = supabase.storage
+      .from('backgrounds')
+      .getPublicUrl(path)
+
+    const res = await fetch(`/api/servers/${serverId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, icon_url: iconUrl, chat_bg_url: publicUrl }),
+    })
+
+    if (res.ok) {
+      setServer(prev => prev ? { ...prev, chat_bg_url: publicUrl } : prev)
+      setSuccess('Fondo actualizado')
+    }
+  }
+
+  setUploading(false)
+  if (chatBgInputRef.current) chatBgInputRef.current.value = ''
+}
+
   
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -361,6 +400,49 @@ const removeRoleFromMember = async (memberId: string, roleId: string) => {
                         </div>
                         </div>
     )}
+
+    {/* Fondo del chat */}
+<div>
+  <label className="text-gray-300 text-xs font-semibold uppercase tracking-wide mb-2 block">
+    Fondo del chat
+  </label>
+  <div
+    className="relative h-24 rounded-lg cursor-pointer group overflow-hidden border border-gray-700"
+    style={{
+      backgroundColor: '#374151',
+      backgroundImage: server?.chat_bg_url ? `url(${server.chat_bg_url})` : undefined,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    }}
+    onClick={() => chatBgInputRef.current?.click()}
+  >
+    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+      <Camera size={20} className="text-white" />
+    </div>
+    <input
+      ref={chatBgInputRef}
+      type="file"
+      accept="image/*"
+      onChange={handleChatBgChange}
+      className="hidden"
+    />
+  </div>
+  {server?.chat_bg_url && (
+    <button
+      onClick={async () => {
+        await fetch(`/api/servers/${serverId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, icon_url: iconUrl, chat_bg_url: null }),
+        })
+        setServer(prev => prev ? { ...prev, chat_bg_url: null } : prev)
+      }}
+      className="text-xs text-red-400 hover:text-red-300 mt-1 transition-colors"
+    >
+      Quitar fondo
+    </button>
+  )}
+</div>
 
               {canManage && (
                 <button

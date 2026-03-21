@@ -10,7 +10,7 @@ export async function PATCH(req: NextRequest, { params }: Props) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { name, icon_url } = await req.json()
+  const { name, icon_url, chat_bg_url } = await req.json()
 
   const { data: member } = await supabase
     .from('members')
@@ -25,7 +25,7 @@ export async function PATCH(req: NextRequest, { params }: Props) {
 
   const { data, error } = await supabase
     .from('servers')
-    .update({ name, icon_url })
+    .update({ name, icon_url, chat_bg_url })
     .eq('id', serverId)
     .select()
     .single()
