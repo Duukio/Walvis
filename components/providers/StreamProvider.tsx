@@ -1,8 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { StreamVideo, StreamVideoClient } from '@stream-io/video-react-sdk'
+import { useEffect, useState, createContext, useContext } from 'react'
+import { StreamVideo, StreamVideoClient, Call } from '@stream-io/video-react-sdk'
 import { createClient } from '@/lib/supabase/client'
+
+type StreamContextType = {
+  activeCall: Call | null
+  setActiveCall: (call: Call | null) => void
+}
+
+export const StreamContext = createContext<StreamContextType>({
+  activeCall: null,
+  setActiveCall: () => {},
+})
+
+export const useStreamContext = () => useContext(StreamContext)
 
 export default function StreamProvider({
   children,
@@ -10,6 +22,7 @@ export default function StreamProvider({
   children: React.ReactNode
 }) {
   const [client, setClient] = useState<StreamVideoClient | null>(null)
+  const [activeCall, setActiveCall] = useState<Call | null>(null)
 
   useEffect(() => {
     const init = async () => {
@@ -17,14 +30,12 @@ export default function StreamProvider({
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      // Obtener perfil para el nombre de usuario
       const { data: profile } = await supabase
         .from('profiles')
         .select('username, avatar_url')
         .eq('id', user.id)
         .single()
 
-      // Obtener token del servidor
       const res = await fetch('/api/stream/token')
       const { token } = await res.json()
 
@@ -46,5 +57,9 @@ export default function StreamProvider({
 
   if (!client) return <>{children}</>
 
-  return <StreamVideo client={client}>{children}</StreamVideo>
+  return (
+    <StreamContext.Provider value={{ activeCall, setActiveCall }}>
+      <StreamVideo client={client}>{children}</StreamVideo>
+    </StreamContext.Provider>
+  )
 }

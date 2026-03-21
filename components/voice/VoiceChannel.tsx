@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Call,
   CallingState,
@@ -13,8 +13,7 @@ import {
 import { useRouter } from 'next/navigation'
 import { Loader2, Mic, MicOff, Video, VideoOff, PhoneOff } from 'lucide-react'
 import Image from 'next/image'
-
-let globalCallActive = false
+import { useStreamContext } from '@/components/providers/StreamProvider'
 
 export default function VoiceChannel({
   channelId,
@@ -26,55 +25,50 @@ export default function VoiceChannel({
   isVideo?: boolean
 }) {
   const client = useStreamVideoClient()
-  const [call, setCall] = useState<Call | null>(null)
+  const { activeCall, setActiveCall } = useStreamContext()
   const [loading, setLoading] = useState(true)
-  const joinedRef = useRef(false)
 
+  useEffect(() => {
+    if (!client) return
 
-useEffect(() => {
-  const handler = async () => {
-    if (joinedRef.current || globalCallActive) {
-      await client?.call('default', channelId).leave().catch(() => {})
-      joinedRef.current = false
-      globalCallActive = false
-      setCall(null)
+    const joinCall = async () => {
+      setLoading(true)
+      try {
+        // Ya estamos en este canal
+        if (activeCall?.id === channelId) {
+          setLoading(false)
+          return
+        }
+
+        // Salir de otra llamada activa primero
+        if (activeCall && activeCall.id !== channelId) {
+          await activeCall.leave().catch(() => {})
+          setActiveCall(null)
+        }
+
+        const callInstance = client.call('default', channelId)
+        await callInstance.join({ create: true })
+        setActiveCall(callInstance)
+      } catch (err) {
+        console.error('Error al unirse al canal:', err)
+      } finally {
+        setLoading(false)
+      }
     }
-  }
-  window.addEventListener('leave-call', handler)
-  return () => window.removeEventListener('leave-call', handler)
-}, [client, channelId])
 
-useEffect(() => {
-  if (!client || joinedRef.current || globalCallActive) return
+    joinCall()
+  }, [client, channelId])
 
-  const joinCall = async () => {
-    joinedRef.current = true
-    globalCallActive = true
-    setLoading(true)
-    try {
-      const callInstance = client.call('default', channelId)
-      await callInstance.join({ create: true })
-      setCall(callInstance)
-    } catch (err) {
-      console.error('Error al unirse al canal:', err)
-      joinedRef.current = false
-      globalCallActive = false
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    const handler = async () => {
+      if (activeCall) {
+        await activeCall.leave().catch(() => {})
+        setActiveCall(null)
+      }
     }
-  }
-
-  joinCall()
-
-  return () => {
-    if (joinedRef.current) {
-      client.call('default', channelId).leave().catch(() => {})
-      joinedRef.current = false
-      globalCallActive = false
-      setCall(null)
-    }
-  }
-}, [client, channelId])
+    window.addEventListener('leave-call', handler)
+    return () => window.removeEventListener('leave-call', handler)
+  }, [activeCall])
 
   if (!client || loading) {
     return (
@@ -85,7 +79,7 @@ useEffect(() => {
     )
   }
 
-  if (!call) {
+  if (!activeCall) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
         No se pudo conectar al canal
@@ -94,7 +88,7 @@ useEffect(() => {
   }
 
   return (
-    <StreamCall call={call}>
+    <StreamCall call={activeCall}>
       <VoiceCallUI channelName={channelName} isVideo={isVideo} channelId={channelId} />
     </StreamCall>
   )
@@ -103,12 +97,14 @@ useEffect(() => {
 function CustomCallControls({ channelId }: { channelId: string }) {
   const call = useCall()
   const router = useRouter()
+  const { setActiveCall } = useStreamContext()
   const { useMicrophoneState, useCameraState } = useCallStateHooks()
   const { microphone, isMute: isMicMuted } = useMicrophoneState()
   const { camera, isMute: isCamMuted } = useCameraState()
 
   const handleLeave = async () => {
     await call?.leave()
+    setActiveCall(null)
     const serverId = window.location.pathname.split('/')[2]
     router.push(`/servers/${serverId}`)
   }
@@ -122,10 +118,7 @@ function CustomCallControls({ channelId }: { channelId: string }) {
         }`}
         title={isMicMuted ? 'Activar micrófono' : 'Silenciar'}
       >
-        {isMicMuted
-          ? <MicOff size={20} className="text-white" />
-          : <Mic size={20} className="text-white" />
-        }
+        {isMicMuted ? <MicOff size={20} className="text-white" /> : <Mic size={20} className="text-white" />}
       </button>
 
       <button
@@ -135,10 +128,7 @@ function CustomCallControls({ channelId }: { channelId: string }) {
         }`}
         title={isCamMuted ? 'Activar cámara' : 'Apagar cámara'}
       >
-        {isCamMuted
-          ? <VideoOff size={20} className="text-white" />
-          : <Video size={20} className="text-white" />
-        }
+        {isCamMuted ? <VideoOff size={20} className="text-white" /> : <Video size={20} className="text-white" />}
       </button>
 
       <button
@@ -189,10 +179,7 @@ function VoiceCallUI({
         {isVideo ? (
           <div className="grid grid-cols-2 gap-3 auto-rows-fr">
             {participants.map((participant) => (
-              <div
-                key={participant.sessionId}
-                className="aspect-video bg-gray-800 rounded-lg overflow-hidden"
-              >
+              <div key={participant.sessionId} className="aspect-video bg-gray-800 rounded-lg overflow-hidden">
                 <ParticipantView participant={participant} />
               </div>
             ))}
@@ -200,55 +187,36 @@ function VoiceCallUI({
         ) : (
           <div className="flex flex-col gap-2">
             {participants.map((participant) => {
-  const isMicMuted = !participant.publishedTracks?.includes(2)
-  return (
-    <div key={participant.sessionId}>
-      {/* ParticipantView oculto para reproducir el audio */}
-      <div className="hidden">
-        <ParticipantView participant={participant} />
-      </div>
-
-      <div className="flex items-center gap-3 px-3 py-2 rounded bg-gray-600/50">
-        <div className={`relative w-10 h-10 rounded-full shrink-0 transition-all duration-200 ${
-          participant.isSpeaking
-            ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-gray-600'
-            : 'ring-2 ring-transparent'
-        }`}>
-          {participant.image ? (
-            <Image
-              src={participant.image}
-              alt={participant.name ?? 'Usuario'}
-              width={40}
-              height={40}
-              className="object-cover w-full h-full rounded-full"
-            />
-          ) : (
-            <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-sm font-bold text-white rounded-full">
-              {participant.name?.slice(0, 2).toUpperCase() ?? '??'}
-            </div>
-          )}
-        </div>
-
-        <span className="text-gray-200 text-sm flex-1">
-          {participant.name ?? 'Usuario'}
-        </span>
-
-        <div className={`w-2.5 h-2.5 rounded-full transition-colors duration-200 ${
-          participant.isSpeaking
-            ? 'bg-green-400 animate-pulse'
-            : isMicMuted
-            ? 'bg-red-500'
-            : 'bg-gray-500'
-        }`} />
-      </div>
-    </div>
-  )
-})}
-
+              const isMicMuted = !participant.publishedTracks?.includes(2)
+              return (
+                <div key={participant.sessionId}>
+                  <div className="hidden">
+                    <ParticipantView participant={participant} />
+                  </div>
+                  <div className="flex items-center gap-3 px-3 py-2 rounded bg-gray-600/50">
+                    <div className={`relative w-10 h-10 rounded-full shrink-0 transition-all duration-200 ${
+                      participant.isSpeaking
+                        ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-gray-600'
+                        : 'ring-2 ring-transparent'
+                    }`}>
+                      {participant.image ? (
+                        <Image src={participant.image} alt={participant.name ?? 'Usuario'} width={40} height={40} className="object-cover w-full h-full rounded-full" />
+                      ) : (
+                        <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-sm font-bold text-white rounded-full">
+                          {participant.name?.slice(0, 2).toUpperCase() ?? '??'}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-gray-200 text-sm flex-1">{participant.name ?? 'Usuario'}</span>
+                    <div className={`w-2.5 h-2.5 rounded-full transition-colors duration-200 ${
+                      participant.isSpeaking ? 'bg-green-400 animate-pulse' : isMicMuted ? 'bg-red-500' : 'bg-gray-500'
+                    }`} />
+                  </div>
+                </div>
+              )
+            })}
             {participants.length === 0 && (
-              <div className="text-center text-gray-400 text-sm mt-8">
-                Nadie en el canal todavía
-              </div>
+              <div className="text-center text-gray-400 text-sm mt-8">Nadie en el canal todavía</div>
             )}
           </div>
         )}
