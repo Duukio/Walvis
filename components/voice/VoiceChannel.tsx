@@ -28,6 +28,19 @@ export default function VoiceChannel({
   const [loading, setLoading] = useState(true)
   const joinedRef = useRef(false)
 
+
+ useEffect(() => {
+  const handler = async () => {
+    if (joinedRef.current) {
+      await client?.call('default', channelId).leave().catch(() => {})
+      joinedRef.current = false
+      setCall(null)
+    }
+  }
+  window.addEventListener('leave-call', handler)
+  return () => window.removeEventListener('leave-call', handler)
+}, [client, channelId])
+
   useEffect(() => {
     if (!client || joinedRef.current) return
 

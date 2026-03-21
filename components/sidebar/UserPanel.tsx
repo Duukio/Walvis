@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Settings, LogOut, ChevronDown, Camera } from 'lucide-react'
 import Image from 'next/image'
 import NotificationBell from '@/components/notifications/NotificationBell'
+import { useCall } from '@stream-io/video-react-sdk'
 
 
 type Profile = {
@@ -35,6 +36,7 @@ export default function UserPanel() {
   const [status, setStatus] = useState<Status>('online')
   const [showStatus, setShowStatus] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const call = useCall()
 
   useEffect(() => {
     fetchProfile()
@@ -272,7 +274,9 @@ const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         <div className="w-full flex flex-col gap-1">
           <NotificationBell />
           <button
-            onClick={() => router.push('/settings')}
+            onClick={async ()=> {window.dispatchEvent(new CustomEvent('leave-call'))
+              router.push('/settings')
+            }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
           >
             <Settings size={16} />
