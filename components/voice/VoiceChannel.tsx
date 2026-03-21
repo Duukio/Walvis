@@ -14,6 +14,8 @@ import { useRouter } from 'next/navigation'
 import { Loader2, Mic, MicOff, Video, VideoOff, PhoneOff } from 'lucide-react'
 import Image from 'next/image'
 
+let globalCallActive = false
+
 export default function VoiceChannel({
   channelId,
   channelName,
@@ -29,11 +31,12 @@ export default function VoiceChannel({
   const joinedRef = useRef(false)
 
 
- useEffect(() => {
+useEffect(() => {
   const handler = async () => {
-    if (joinedRef.current) {
+    if (joinedRef.current || globalCallActive) {
       await client?.call('default', channelId).leave().catch(() => {})
       joinedRef.current = false
+      globalCallActive = false
       setCall(null)
     }
   }
@@ -41,34 +44,37 @@ export default function VoiceChannel({
   return () => window.removeEventListener('leave-call', handler)
 }, [client, channelId])
 
-  useEffect(() => {
-    if (!client || joinedRef.current) return
+useEffect(() => {
+  if (!client || joinedRef.current || globalCallActive) return
 
-    const joinCall = async () => {
-      joinedRef.current = true
-      setLoading(true)
-      try {
+  const joinCall = async () => {
+    joinedRef.current = true
+    globalCallActive = true
+    setLoading(true)
+    try {
       const callInstance = client.call('default', channelId)
       await callInstance.join({ create: true })
-        setCall(callInstance)
-      } catch (err) {
-        console.error('Error al unirse al canal:', err)
-        joinedRef.current = false
-      } finally {
-        setLoading(false)
-      }
+      setCall(callInstance)
+    } catch (err) {
+      console.error('Error al unirse al canal:', err)
+      joinedRef.current = false
+      globalCallActive = false
+    } finally {
+      setLoading(false)
     }
+  }
 
-    joinCall()
+  joinCall()
 
-    return () => {
-      if (joinedRef.current) {
-        client.call('default', channelId).leave().catch(() => {})
-        joinedRef.current = false
-        setCall(null)
-      }
+  return () => {
+    if (joinedRef.current) {
+      client.call('default', channelId).leave().catch(() => {})
+      joinedRef.current = false
+      globalCallActive = false
+      setCall(null)
     }
-  }, [client, channelId])
+  }
+}, [client, channelId])
 
   if (!client || loading) {
     return (
