@@ -1,6 +1,6 @@
 # Walvis 🐋
 
-Una alternativa a Discord construida con Next.js y Supabase. Proyecto desarrollado en 6 días.
+Una alternativa a Discord construida con Next.js y Supabase. Proyecto desarrollado para aprender.
 
 ## ¿Qué es Walvis?
 
