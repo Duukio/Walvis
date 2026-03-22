@@ -145,18 +145,26 @@ export default function MemberList({ serverId }: { serverId: string }) {
           <p className="text-sm truncate" style={{ color: member.profiles.nickname_color ?? '#9ca3af' }}>
             {member.profiles.username}
           </p>
-          {memberRolesMap[member.profiles.id]?.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-0.5">
-              {memberRolesMap[member.profiles.id].map((roleId) => {
-                const r = serverRoles.find(sr => sr.id === roleId)
-                if (!r) return null
-                return (
-                  <span key={roleId} className="text-xs px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: r.color }}>
-                    {r.name}
-                  </span>
-                )
-              })}
-            </div>
+{memberRolesMap[member.profiles.id]?.length > 0 && (
+  <div className="flex flex-wrap gap-1 mt-0.5">
+    {memberRolesMap[member.profiles.id].slice(0, 2).map((roleId) => {
+      const r = serverRoles.find(sr => sr.id === roleId)
+      if (!r) return null
+      return (
+      <span 
+      key={roleId} 
+      className="text-xs px-2 py-0.5 rounded font-semibold text-white" 
+      style={{ backgroundColor: r.color + '33', color: r.color, border: `1px solid ${r.color}40` }}>
+    {r.name}
+      </span>
+        )
+        })}
+        {memberRolesMap[member.profiles.id].length > 2 && (
+          <span className="text-xs px-2 py-0.5 rounded font-semibold bg-gray-600/50 text-gray-400">
+            +{memberRolesMap[member.profiles.id].length - 2}
+            </span>
+          )}
+          </div>
           )}
         </div>
 
