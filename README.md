@@ -1,4 +1,4 @@
-# Walvis 🐋
+# Walvis 
 
 Una alternativa a Discord construida con Next.js y Supabase. Proyecto desarrollado para aprender.
 
