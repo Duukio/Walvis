@@ -25,6 +25,7 @@ const STATUS_OPTIONS: { value: Status; label: string; color: string }[] = [
   { value: 'invisible', label: 'Invisible',    color: 'bg-gray-500' },
 ]
 
+
 export default function UserPanel() {
   const supabase = createClient()
   const router = useRouter()
