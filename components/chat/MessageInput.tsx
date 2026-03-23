@@ -17,9 +17,10 @@ type Attachment = {
 }
 
 type MessageInputProps = {
-  channelId: string
+  channelId?: string
+  receiverId?: string
   replyTo?: ReplyMessage | null
-  onCancelReply: () => void
+  onCancelReply?: () => void
 }
 
 type ReplyMessage = {
@@ -28,7 +29,7 @@ type ReplyMessage = {
   content: string;
 };
 
-export default function MessageInput({ channelId, replyTo, onCancelReply }: MessageInputProps) {
+export default function MessageInput({ channelId, receiverId,replyTo, onCancelReply }: MessageInputProps) {
   const supabase = createClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [content, setContent] = useState('')
@@ -55,29 +56,31 @@ export default function MessageInput({ channelId, replyTo, onCancelReply }: Mess
 
 const handleSend = async () => {
   const trimmed = content.trim()
-  if ((!trimmed && attachments.length === 0) || sending) return
+  if (!trimmed || sending) return
 
   setSending(true)
 
-  const res = await fetch('/api/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      channel_id: channelId,
-      content: trimmed || '',
-      attachments: attachments.length > 0 ? attachments : null,
-      reply_to: replyTo?.id ?? null,
-    }),
-  })
-
-  if (!res.ok) {
-    const data = await res.json()
-    console.error('Error enviando mensaje:', data.error)
+  if (channelId) {
+    await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channel_id: channelId,
+        content: trimmed,
+      }),
+    })
+  } else if (receiverId) {
+    await fetch('/api/dm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        receiver_id: receiverId,
+        content: trimmed,
+      }),
+    })
   }
 
   setContent('')
-  setAttachments([])
-  onCancelReply()
   setSending(false)
 }
 
@@ -145,7 +148,7 @@ const handleGifSelect = async (gif: any) => {
     }),
   })
 
-  onCancelReply()
+  onCancelReply?.()
   setSending(false)
 }
 

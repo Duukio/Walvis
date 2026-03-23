@@ -7,7 +7,7 @@ import { es } from 'date-fns/locale'
 import { Pencil, Trash2, Check, X, Paperclip, SendHorizonal, Smile } from 'lucide-react'
 import Image from 'next/image'
 import StatusIndicator from '@/components/ui/StatusIndicator'
-import EmojiPicker from '@/components/chat/EmojiPicker'
+import MessageInput from '@/components/chat/MessageInput'
 
 type DM = {
   id: string
@@ -36,7 +36,6 @@ export default function DMPage({ params }: Props) {
   const [contact, setContact] = useState<any>(null)
   const [content, setContent] = useState('')
   const [sending, setSending] = useState(false)
-  const [showEmoji, setShowEmoji] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -102,24 +101,12 @@ export default function DMPage({ params }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSend = async () => {
-    const trimmed = content.trim()
-    if (!trimmed || sending) return
-    setSending(true)
 
-    await fetch('/api/dm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ receiver_id: userId, content: trimmed }),
-    })
-
-    setContent('')
-    setSending(false)
-  }
 
   const handleDelete = async (id: string) => {
     await supabase.from('direct_messages').delete().eq('id', id)
   }
+  
 
   return (
     <div className="flex flex-col h-full bg-gray-700">
@@ -167,47 +154,10 @@ export default function DMPage({ params }: Props) {
       </div>
 
       {/* Input */}
-      <div className="px-4 pb-4 pt-2 relative">
-        {showEmoji && (
-          <div id="emoji-panel" className="absolute bottom-full mb-2 left-4 z-50">
-            <EmojiPicker onSelect={(emoji) => {
-              setContent(prev => prev + emoji)
-              setShowEmoji(false)
-            }} />
-          </div>
-        )}
-
-        <div className="flex items-center gap-2 bg-gray-600 rounded-lg px-3 py-2">
-          <input
-            type="text"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handleSend()
-              }
-            }}
-            placeholder={`Mensaje a ${contact?.username ?? '...'}`}
-            className="flex-1 bg-transparent text-gray-200 placeholder-gray-400 text-sm focus:outline-none"
-            disabled={sending}
-          />
-          <button
-            onClick={() => setShowEmoji(!showEmoji)}
-            className="text-gray-400 hover:text-white transition-colors shrink-0"
-          >
-            <Smile size={18} />
-          </button>
-          <button
-            onClick={handleSend}
-            disabled={!content.trim() || sending}
-            className="text-gray-400 hover:text-indigo-400 disabled:opacity-30 transition-colors shrink-0"
-          >
-            <SendHorizonal size={18} />
-          </button>
+      <div>
+        <MessageInput receiverId={userId} />
         </div>
       </div>
-    </div>
   )
 }
 
