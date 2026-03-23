@@ -56,7 +56,7 @@ export default function MessageInput({ channelId, receiverId,replyTo, onCancelRe
 
 const handleSend = async () => {
   const trimmed = content.trim()
-  if (!trimmed || sending) return
+  if (!trimmed && attachments.length === 0 || sending) return
 
   setSending(true)
 
@@ -67,6 +67,8 @@ const handleSend = async () => {
       body: JSON.stringify({
         channel_id: channelId,
         content: trimmed,
+        attachments,
+        replyTo: replyTo?.id ?? null,
       }),
     })
   } else if (receiverId) {
@@ -76,11 +78,13 @@ const handleSend = async () => {
       body: JSON.stringify({
         receiver_id: receiverId,
         content: trimmed,
+        attachments,
       }),
     })
   }
 
   setContent('')
+  setAttachments([])
   setSending(false)
 }
 
@@ -137,11 +141,14 @@ const handleGifSelect = async (gif: any) => {
   setGiphySearch('')
   setSending(true)
 
-  await fetch('/api/messages', {
+  const url = channelId ? '/api/messages' : '/api/dm'
+
+  await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      channel_id: channelId,
+      channel_id: channelId ?? null,
+      receiver_id: receiverId ?? null,
       content: '',
       attachments: [gifAttachment],
       reply_to: replyTo?.id ?? null,
