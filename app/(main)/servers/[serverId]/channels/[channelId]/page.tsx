@@ -88,7 +88,7 @@ export default function ChannelPage({ params }: Props) {
             onToggleMembers={() => setShowMembers(!showMembers)}
           />
           <ChatMessages channelId={channelId} serverId={serverId} />
-          <MessageInput channelId={channelId} />
+          <MessageInput channelId={channelId} replyTo={null} onCancelReply={() => {}} />
         </div>
       </div>
 
