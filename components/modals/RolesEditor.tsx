@@ -211,16 +211,11 @@ export default function RolesEditor({ serverId }: { serverId: string }) {
                 {(Object.keys(PERMISSION_LABELS) as (keyof Permission)[]).map((perm) => (
                   <div key={perm} className="flex items-center justify-between px-3 py-2 bg-gray-700/50 rounded">
                     <span className="text-gray-200 text-sm">{PERMISSION_LABELS[perm]}</span>
-                    <button
-                      onClick={() => updatePermission(perm, !selected.permissions[perm])}
-                      className={`w-10 h-5 rounded-full transition-colors relative ${
-                        selected.permissions[perm] ? 'bg-indigo-600' : 'bg-gray-600'
-                      }`}
-                    >
-                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                        selected.permissions[perm] ? 'translate-x-5' : 'translate-x-0.5'
-                      }`} />
-                    </button>
+                  <button
+                  onClick={() => updatePermission(perm, !selected.permissions?.[perm])
+                  }className={`w-10 h-5 rounded-full transition-colors relative ${selected.permissions?.[perm] ? 'bg-indigo-600' : 'bg-gray-600'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${selected.permissions?.[perm] ? 'translate-x-2' : 'translate-x-0.5'}`}/>
+                  </button>
                   </div>
                 ))}
               </div>
