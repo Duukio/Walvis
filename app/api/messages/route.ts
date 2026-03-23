@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       content: content?.trim() || '',
       attachments: attachments ?? null,
     })
-    .select(`id, content, attachments, profiles(username)`)
+    .select(`id, content, attachments, reply_to, profiles(username)`)
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

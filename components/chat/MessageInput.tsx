@@ -16,7 +16,19 @@ type Attachment = {
   size?: number
 }
 
-export default function MessageInput({ channelId }: { channelId: string }) {
+type MessageInputProps = {
+  channelId: string
+  replyTo?: ReplyMessage | null
+  onCancelReply: () => void
+}
+
+type ReplyMessage = {
+  id: string;
+  username: string;
+  content: string;
+};
+
+export default function MessageInput({ channelId, replyTo, onCancelReply }: MessageInputProps) {
   const supabase = createClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [content, setContent] = useState('')
@@ -41,31 +53,33 @@ export default function MessageInput({ channelId }: { channelId: string }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const handleSend = async () => {
-    const trimmed = content.trim()
-    if ((!trimmed && attachments.length === 0) || sending) return
+const handleSend = async () => {
+  const trimmed = content.trim()
+  if ((!trimmed && attachments.length === 0) || sending) return
 
-    setSending(true)
+  setSending(true)
 
-    const res = await fetch('/api/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        channel_id: channelId,
-        content: trimmed || '',
-        attachments: attachments.length > 0 ? attachments : null,
-      }),
-    })
+  const res = await fetch('/api/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      channel_id: channelId,
+      content: trimmed || '',
+      attachments: attachments.length > 0 ? attachments : null,
+      reply_to: replyTo?.id ?? null,
+    }),
+  })
 
-    if (!res.ok) {
-      const data = await res.json()
-      console.error('Error enviando mensaje:', data.error)
-    }
-
-    setContent('')
-    setAttachments([])
-    setSending(false)
+  if (!res.ok) {
+    const data = await res.json()
+    console.error('Error enviando mensaje:', data.error)
   }
+
+  setContent('')
+  setAttachments([])
+  onCancelReply()
+  setSending(false)
+}
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -115,7 +129,7 @@ const handleGifSelect = async (gif: any) => {
     url: gif.images.fixed_height.url,
     name: gif.title,
   }
-  
+
   setShowGiphy(false)
   setGiphySearch('')
   setSending(true)
@@ -127,9 +141,11 @@ const handleGifSelect = async (gif: any) => {
       channel_id: channelId,
       content: '',
       attachments: [gifAttachment],
+      reply_to: replyTo?.id ?? null,
     }),
   })
 
+  onCancelReply()
   setSending(false)
 }
 
