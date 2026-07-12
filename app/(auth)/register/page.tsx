@@ -2,7 +2,6 @@
 
 export const dynamic = 'force-dynamic'
 
-
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -10,37 +9,37 @@ import Link from 'next/link'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const supabase = createClient()
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-const handleRegister = async () => {
-  setLoading(true)
-  setError(null)
+  const handleRegister = async () => {
+    setLoading(true)
+    setError(null)
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { username },
-    },
-  })
+    const supabase = createClient()
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { username },
+      },
+    })
 
-  console.log("SIGNUP DATA:", data)
-  console.log("SIGNUP ERROR:", error)
+    console.log("SIGNUP DATA:", data)
+    console.log("SIGNUP ERROR:", error)
 
-  if (error) {
-    setError(error.message)
-    setLoading(false)
-    return
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
+    }
+
+    router.push('/')
+    router.refresh()
   }
-
-  router.push('/')
-  router.refresh()
-}
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center">
