@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import StatusIndicator from '@/components/ui/StatusIndicator'
+import { X } from 'lucide-react'
 
 type DMContact = {
   id: string
@@ -12,7 +13,6 @@ type DMContact = {
   avatar_url: string | null
   status: string
   nickname_color: string | null
-  lastMessage?: string
 }
 
 export default function DMList() {
@@ -33,7 +33,14 @@ export default function DMList() {
   }, [])
 
   const fetchContacts = async (userId: string) => {
-    // Traer todos los usuarios con los que tiene DMs
+    // Traer DMs ocultos
+    const { data: hidden } = await supabase
+      .from('hidden_dms')
+      .select('other_user_id')
+      .eq('user_id', userId)
+
+    const hiddenIds = new Set(hidden?.map(h => h.other_user_id) ?? [])
+
     const { data } = await supabase
       .from('direct_messages')
       .select(`
@@ -51,18 +58,35 @@ export default function DMList() {
 
     if (!data) return
 
-    // Deduplicar contactos
     const seen = new Set<string>()
     const list: DMContact[] = []
 
     for (const dm of data) {
       const contact = dm.sender_id === userId ? dm.receiver : dm.sender
       if (!contact || seen.has((contact as any).id)) continue
+      if (hiddenIds.has((contact as any).id)) continue // filtrar ocultos
       seen.add((contact as any).id)
       list.push(contact as any)
     }
 
     setContacts(list)
+  }
+
+  const handleHideDM = async (contactId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!currentUserId) return
+
+    await supabase.from('hidden_dms').insert({
+      user_id: currentUserId,
+      other_user_id: contactId,
+    })
+
+    setContacts(prev => prev.filter(c => c.id !== contactId))
+
+    // Si estabas en ese DM, volver al home
+    if (params?.userId === contactId) {
+      router.push('/home')
+    }
   }
 
   const activeUserId = params?.userId as string
@@ -74,14 +98,14 @@ export default function DMList() {
       </p>
       <div className="flex flex-col gap-0.5 px-2">
         {contacts.map((contact) => (
-          <button
+          <div
             key={contact.id}
-            onClick={() => router.push(`/home/dm/${contact.id}`)}
-            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
+            className={`group w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors cursor-pointer ${
               activeUserId === contact.id
                 ? 'bg-gray-600 text-white'
                 : 'text-gray-400 hover:bg-gray-700 hover:text-gray-200'
             }`}
+            onClick={() => router.push(`/home/dm/${contact.id}`)}
           >
             <div className="relative shrink-0">
               <div className="w-8 h-8 rounded-full overflow-hidden">
@@ -107,10 +131,20 @@ export default function DMList() {
                 />
               </div>
             </div>
-            <span className="truncate" style={{ color: contact.nickname_color ?? undefined }}>
+
+            <span className="flex-1 truncate" style={{ color: contact.nickname_color ?? undefined }}>
               {contact.username}
             </span>
-          </button>
+
+            {/* Botón eliminar */}
+            <button
+              onClick={(e) => handleHideDM(contact.id, e)}
+              className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-white transition-all shrink-0"
+              title="Ocultar conversación"
+            >
+              <X size={14} />
+            </button>
+          </div>
         ))}
       </div>
     </div>
