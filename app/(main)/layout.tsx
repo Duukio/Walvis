@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { hasSupabaseEnv } from '@/lib/supabase/env'
 import ServerList from '@/components/sidebar/ServerList'
 import UserPanel from '@/components/sidebar/UserPanel'
 import StreamProvider from '@/components/providers/StreamProvider'
@@ -13,6 +14,8 @@ export default async function MainLayout({
 }: {
   children: React.ReactNode
 }) {
+  if (!hasSupabaseEnv()) redirect('/login')
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
