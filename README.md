@@ -50,6 +50,13 @@ npm install
 
 Creá un archivo `.env.local` en la raíz del proyecto:
 
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu_publishable_key
+```
+
+En Vercel, agregá esas mismas variables en **Project Settings → Environment Variables** para Production, Preview y Development. Si faltan, `npm run build` puede fallar al prerenderizar páginas que usan Supabase.
+
 ### 4. Configurá Supabase
 
 en el **SQL Editor** de supabase configura los parametros de la Base de datos.
