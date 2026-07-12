@@ -1,6 +1,6 @@
 'use client'
 
-import { useState,useEffect,useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import StatusIndicator from '@/components/ui/StatusIndicator'
 import Image from 'next/image'
@@ -8,6 +8,7 @@ import UserProfilePopup from '@/components/ui/UserProfilePopup'
 
 type Member = {
   role: string
+  nickname: string | null // NUEVO: Capturar apodo local
   profiles: {
     id: string
     username: string
@@ -46,6 +47,7 @@ export default function MemberList({ serverId }: { serverId: string }) {
       .from('members')
       .select(`
         role,
+        nickname,
         profiles (
           id,
           username,
@@ -64,7 +66,6 @@ export default function MemberList({ serverId }: { serverId: string }) {
       .select('id, name, color')
       .eq('server_id', serverId)
       .order('position', { ascending: false })
-
       
     if (rolesData) setServerRoles(rolesData)
 
@@ -72,7 +73,6 @@ export default function MemberList({ serverId }: { serverId: string }) {
       .from('member_roles')
       .select('user_id, role_id')
       .eq('server_id', serverId)
-
 
     if (memberRolesData) {
       const map: Record<string, string[]> = {}
@@ -112,81 +112,85 @@ export default function MemberList({ serverId }: { serverId: string }) {
                 {ROLE_LABEL[role]} — {group.length}
               </p>
               <div className="flex flex-col gap-0.5 px-2">
-            {group.map((member) => {
-  const MemberItem = () => {
-    const [showProfile, setShowProfile] = useState(false)
-    const ref = useRef<HTMLDivElement>(null)
+                {group.map((member) => {
+                  const MemberItem = () => {
+                    const [showProfile, setShowProfile] = useState(false)
+                    const ref = useRef<HTMLDivElement>(null)
 
-    return (
-      <div
-        key={member.profiles.id}
-        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700 transition-colors cursor-pointer"
-        ref={ref}
-        onClick={() => setShowProfile(true)}
-      >
-        {/* Avatar */}
-        <div className="relative shrink-0">
-          <div className="w-8 h-8 rounded-full overflow-hidden">
-            {member.profiles.avatar_url ? (
-              <Image src={member.profiles.avatar_url} alt={member.profiles.username} width={32} height={32} className="object-cover w-full h-full" />
-            ) : (
-              <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-                {member.profiles.username.slice(0, 2).toUpperCase()}
-              </div>
-            )}
-          </div>
-          <div className="absolute -bottom-0.5 -right-0.5 border-2 border-gray-800 rounded-full">
-            <StatusIndicator userId={member.profiles.id} initialStatus={member.profiles.status as any} size="sm" />
-          </div>
-        </div>
+                    // NUEVO: Priorizar apodo, si no hay cae en el username
+                    const displayName = member.nickname || member.profiles.username
 
-        {/* Nombre y roles */}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm truncate" style={{ color: member.profiles.nickname_color ?? '#9ca3af' }}>
-            {member.profiles.username}
-          </p>
-{memberRolesMap[member.profiles.id]?.length > 0 && (
-  <div className="flex flex-wrap gap-1 mt-0.5">
-    {memberRolesMap[member.profiles.id].slice(0, 2).map((roleId) => {
-      const r = serverRoles.find(sr => sr.id === roleId)
-      if (!r) return null
-      return (
-      <span 
-      key={roleId} 
-      className="text-xs px-2 py-0.5 rounded font-semibold text-white" 
-      style={{ backgroundColor: r.color + '33', color: r.color, border: `1px solid ${r.color}40` }}>
-    {r.name}
-      </span>
-        )
-        })}
-        {memberRolesMap[member.profiles.id].length > 2 && (
-          <span className="text-xs px-2 py-0.5 rounded font-semibold bg-gray-600/50 text-gray-400">
-            +{memberRolesMap[member.profiles.id].length - 2}
-            </span>
-          )}
-          </div>
-          )}
-        </div>
+                    return (
+                      <div
+                        key={member.profiles.id}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700 transition-colors cursor-pointer"
+                        ref={ref}
+                        onClick={() => setShowProfile(true)}
+                      >
+                        {/* Avatar */}
+                        <div className="relative shrink-0">
+                          <div className="w-8 h-8 rounded-full overflow-hidden">
+                            {member.profiles.avatar_url ? (
+                              <Image src={member.profiles.avatar_url} alt={displayName} width={32} height={32} className="object-cover w-full h-full" />
+                            ) : (
+                              <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+                                {displayName.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="absolute -bottom-0.5 -right-0.5 border-2 border-gray-800 rounded-full">
+                            <StatusIndicator userId={member.profiles.id} initialStatus={member.profiles.status as any} size="sm" />
+                          </div>
+                        </div>
 
-        {/* Badge de rol básico */}
-        {role === 'owner' && <span className="ml-auto text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ backgroundColor: '#f59e0b20', color: '#f59e0b' }}>OWNER</span>}
-        {role === 'admin' && <span className="ml-auto text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ backgroundColor: '#6366f120', color: '#6366f1' }}>ADMIN</span>}
+                        {/* Nombre y roles */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate" style={{ color: member.profiles.nickname_color ?? '#9ca3af' }}>
+                            {displayName}
+                          </p>
+                          {memberRolesMap[member.profiles.id]?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {memberRolesMap[member.profiles.id].slice(0, 2).map((roleId) => {
+                                const r = serverRoles.find(sr => sr.id === roleId)
+                                if (!r) return null
+                                return (
+                                  <span 
+                                    key={roleId} 
+                                    className="text-[10px] px-1.5 py-0.5 rounded font-semibold text-white" 
+                                    style={{ backgroundColor: r.color + '33', color: r.color, border: `1px solid ${r.color}40` }}
+                                  >
+                                    {r.name}
+                                  </span>
+                                )
+                              })}
+                              {memberRolesMap[member.profiles.id].length > 2 && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-gray-600/50 text-gray-400">
+                                  +{memberRolesMap[member.profiles.id].length - 2}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
 
-        {/* Popup */}
-        {showProfile && (
-          <UserProfilePopup
-            userId={member.profiles.id}
-            serverId={serverId}
-            onClose={() => setShowProfile(false)}
-            anchorRef={ref as React.RefObject<HTMLElement>}
-          />
-        )}
-      </div>
-    )
-  }
+                        {/* Badge de rol básico */}
+                        {role === 'owner' && <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0" style={{ backgroundColor: '#f59e0b20', color: '#f59e0b' }}>OWNER</span>}
+                        {role === 'admin' && <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0" style={{ backgroundColor: '#6366f120', color: '#6366f1' }}>ADMIN</span>}
 
-  return <MemberItem key={member.profiles.id} />
-})}
+                        {/* Popup */}
+                        {showProfile && (
+                          <UserProfilePopup
+                            userId={member.profiles.id}
+                            serverId={serverId}
+                            onClose={() => setShowProfile(false)}
+                            anchorRef={ref as React.RefObject<HTMLElement>}
+                          />
+                        )}
+                      </div>
+                    )
+                  }
+
+                  return <MemberItem key={member.profiles.id} />
+                })}
               </div>
             </div>
           )

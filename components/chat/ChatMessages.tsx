@@ -23,6 +23,10 @@ type Message = {
     avatar_url: string | null
     status: string
     nickname_color: string
+    bio: string | null
+  }
+  members?: {
+    nickname: string | null
   }
 }
 
@@ -50,25 +54,17 @@ export default function ChatMessages({ channelId, serverId }: { channelId: strin
 
       if (profile) setCurrentUsername(profile.username)
 
-      const { data: channel } = await supabase
-        .from('channels')
-        .select('server_id')
-        .eq('id', channelId)
+      const { data: member } = await supabase
+        .from('members')
+        .select('role')
+        .eq('server_id', serverId)
+        .eq('user_id', user.id)
         .single()
 
-      if (channel) {
-        const { data: member } = await supabase
-          .from('members')
-          .select('role')
-          .eq('server_id', channel.server_id)
-          .eq('user_id', user.id)
-          .single()
-
-        if (member) setCurrentUserRole(member.role)
-      }
+      if (member) setCurrentUserRole(member.role)
     }
     fetchUser()
-  }, [channelId])
+  }, [channelId, serverId])
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -87,10 +83,15 @@ export default function ChatMessages({ channelId, serverId }: { channelId: strin
             username,
             avatar_url,
             status,
-            nickname_color
+            nickname_color,
+            bio
+          ),
+          members!inner (
+            nickname
           )
         `)
         .eq('channel_id', channelId)
+        .eq('members.server_id', serverId)
         .order('created_at', { ascending: true })
         .limit(50)
 
@@ -99,7 +100,7 @@ export default function ChatMessages({ channelId, serverId }: { channelId: strin
     }
 
     fetchMessages()
-  }, [channelId])
+  }, [channelId, serverId])
 
   useEffect(() => {
     const channel = supabase
@@ -110,13 +111,21 @@ export default function ChatMessages({ channelId, serverId }: { channelId: strin
         async (payload) => {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('username, avatar_url, status, nickname_color')
+            .select('username, avatar_url, status, nickname_color, bio')
             .eq('id', payload.new.user_id)
+            .single()
+
+          const { data: member } = await supabase
+            .from('members')
+            .select('nickname')
+            .eq('server_id', serverId)
+            .eq('user_id', payload.new.user_id)
             .single()
 
           const newMessage: Message = {
             ...(payload.new as Message),
-            profiles: profile ?? { username: 'Desconocido', avatar_url: null, status: 'online', nickname_color: '#ffffff' },
+            profiles: profile ?? { username: 'Desconocido', avatar_url: null, status: 'online', nickname_color: '#ffffff', bio: null },
+            members: { nickname: member?.nickname ?? null }
           }
           setMessages((prev) => [...prev, newMessage])
         }
@@ -144,7 +153,7 @@ export default function ChatMessages({ channelId, serverId }: { channelId: strin
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [channelId])
+  }, [channelId, serverId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -166,16 +175,13 @@ export default function ChatMessages({ channelId, serverId }: { channelId: strin
     )
   }
 
-  if (messages.length === 0) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-          No hay mensajes todavía. ¡Sé el primero en escribir!
-        </div>
-        <MessageInput channelId={channelId} replyTo={null} onCancelReply={() => {}} />
-      </div>
-    )
-  }
+if (messages.length === 0) {
+  return (
+    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+      No hay mensajes todavía. ¡Sé el primero en escribir!
+    </div>
+  )
+}
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -186,18 +192,17 @@ export default function ChatMessages({ channelId, serverId }: { channelId: strin
             message={msg}
             messages={messages}
             isOwn={msg.user_id === currentUserId}
-            canDelete={['owner', 'admin'].includes(currentUserRole)}
+            canDelete={['owner', 'admin', 'moderator'].includes(currentUserRole)}
             currentUsername={currentUsername}
             serverId={serverId}
             onEdit={handleEdit}
             onDelete={handleDelete}
-            onReply={(msg) => setReplyTo({ id: msg.id, username: msg.profiles.username, content: msg.content })}
+            onReply={(msg) => setReplyTo({ id: msg.id, username: msg.members?.nickname || msg.profiles.username, content: msg.content })}
           />
         ))}
         <div ref={bottomRef} />
       </div>
 
-      {/* Preview de respuesta */}
       {replyTo && (
         <div className="mx-4 mb-1 px-3 py-2 bg-gray-600/50 rounded-t border-l-2 border-indigo-500 flex items-center justify-between">
           <div className="min-w-0">
@@ -258,6 +263,7 @@ function MessageItem({
   }
 
   const repliedMessage = message.reply_to ? messages.find(m => m.id === message.reply_to) : null
+  const displayName = message.members?.nickname || message.profiles?.username || 'Desconocido'
 
   return (
     <div
@@ -265,7 +271,6 @@ function MessageItem({
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      {/* Avatar */}
       <div className="relative shrink-0 mt-0.5" ref={avatarRef}>
         <div
           className="w-10 h-10 rounded-full overflow-hidden cursor-pointer"
@@ -274,14 +279,14 @@ function MessageItem({
           {message.profiles?.avatar_url ? (
             <Image
               src={message.profiles.avatar_url}
-              alt={message.profiles.username}
+              alt={displayName}
               width={40}
               height={40}
               className="object-cover w-full h-full"
             />
           ) : (
             <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-sm font-bold text-white">
-              {message.profiles?.username?.slice(0, 2).toUpperCase() ?? '??'}
+              {displayName.slice(0, 2).toUpperCase()}
             </div>
           )}
         </div>
@@ -293,13 +298,11 @@ function MessageItem({
         </div>
       </div>
 
-      {/* Contenido */}
       <div className="flex-1 min-w-0">
-        {/* Preview de respuesta */}
         {repliedMessage && (
           <div className="flex items-center gap-2 mb-1 pl-2 border-l-2 border-indigo-500/50 cursor-pointer hover:border-indigo-400">
             <p className="text-indigo-400 text-xs font-medium shrink-0">
-              {repliedMessage.profiles?.username}
+              {repliedMessage.members?.nickname || repliedMessage.profiles?.username}
             </p>
             <p className="text-gray-400 text-xs truncate">{repliedMessage.content}</p>
           </div>
@@ -311,7 +314,7 @@ function MessageItem({
             style={{ color: message.profiles?.nickname_color ?? '#ffffff' }}
             onClick={() => setShowProfile(true)}
           >
-            {message.profiles?.username ?? 'Desconocido'}
+            {displayName}
           </span>
           <span className="text-gray-400 text-xs">
             {formatDistanceToNow(new Date(message.created_at), { addSuffix: true, locale: es })}
@@ -342,7 +345,6 @@ function MessageItem({
           <MessageContent content={message.content} currentUsername={currentUsername} />
         )}
 
-        {/* Adjuntos */}
         {message.attachments && message.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-1">
             {message.attachments.map((att: any, i: number) => (
@@ -363,7 +365,7 @@ function MessageItem({
                     className="flex items-center gap-2 bg-gray-600 rounded px-3 py-2 text-sm text-gray-200 hover:bg-gray-500 transition-colors"
                   >
                     <Paperclip size={14} />
-                    <span className="max-w-[200px] truncate">{att.name}</span>
+                    <span className="max-w-100px truncate">{att.name}</span>
                   </a>
                 )}
               </div>
@@ -372,7 +374,6 @@ function MessageItem({
         )}
       </div>
 
-      {/* Botones de acción */}
       {showActions && !editing && (
         <div className="absolute right-2 top-1 flex items-center gap-1 bg-gray-700 rounded shadow px-1 py-0.5">
           <button
@@ -395,7 +396,6 @@ function MessageItem({
         </div>
       )}
 
-      {/* Popup de perfil */}
       {showProfile && (
         <UserProfilePopup
           userId={message.user_id}
@@ -420,7 +420,7 @@ function MessageContent({
   const parts = content.split(/(@everyone|@\w+)/g)
 
   return (
-    <p className="text-gray-200 text-sm break-words">
+    <p className="text-gray-200 text-sm warp-break-words">
       {parts.map((part, i) => {
         if (part === '@everyone') {
           return (

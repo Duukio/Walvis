@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { X, Camera, Save, Trash2, Shield, UserMinus, Ban, Loader2, ChevronDown } from 'lucide-react'
+import { X, Camera, Save, Trash2, UserMinus, Ban, Loader2 } from 'lucide-react'
 import Image from 'next/image'
 import RolesEditor from '@/components/modals/RolesEditor'
 
@@ -26,19 +26,6 @@ type Server = {
   chat_bg_url: string | null
 }
 
-type Role = {
-  id: string
-  name: string
-  color: string | null
-  position: number
-}
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'Propietario',
-  admin: 'Admin',
-  member: 'Miembro',
-}
-
 export default function ServerSettingsModal({
   serverId,
   onClose,
@@ -49,6 +36,7 @@ export default function ServerSettingsModal({
   const supabase = createClient()
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const chatBgInputRef = useRef<HTMLInputElement>(null)
 
   const [server, setServer] = useState<Server | null>(null)
   const [members, setMembers] = useState<Member[]>([])
@@ -77,27 +65,27 @@ export default function ServerSettingsModal({
     if (!user) return
     setCurrentUserId(user.id)
 
-const { data: rolesData } = await supabase
-  .from('roles')
-  .select('id, name, color, position')  
-  .eq('server_id', serverId)
-  .order('position', { ascending: false })
+    const { data: rolesData } = await supabase
+      .from('roles')
+      .select('id, name, color, position')  
+      .eq('server_id', serverId)
+      .order('position', { ascending: false })
 
-if (rolesData) setServerRoles(rolesData)
+    if (rolesData) setServerRoles(rolesData)
 
-const { data: memberRolesData } = await supabase
-  .from('member_roles')
-  .select('user_id, role_id')
-  .eq('server_id', serverId)
+    const { data: memberRolesData } = await supabase
+      .from('member_roles')
+      .select('user_id, role_id')
+      .eq('server_id', serverId)
 
-if (memberRolesData) {
-  const map: Record<string, string[]> = {}
-  for (const mr of memberRolesData) {
-    if (!map[mr.user_id]) map[mr.user_id] = []
-    map[mr.user_id].push(mr.role_id)
-  }
-  setMemberRoles(map)
-}
+    if (memberRolesData) {
+      const map: Record<string, string[]> = {}
+      for (const mr of memberRolesData) {
+        if (!map[mr.user_id]) map[mr.user_id] = []
+        map[mr.user_id].push(mr.role_id)
+      }
+      setMemberRoles(map)
+    }
 
     const { data: serverData } = await supabase
       .from('servers')
@@ -154,28 +142,48 @@ if (memberRolesData) {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-const handleSave = async () => {
-  if (!name.trim()) return
-  setSaving(true)
-  setError(null)
-  setSuccess(null)
+  // NUEVO: Función para remover permanentemente el icono del servidor
+  const handleRemoveIcon = async () => {
+    if (!confirm('¿Seguro de que querés quitar el icono del servidor?')) return
+    setUploading(true)
+    
+    const res = await fetch(`/api/servers/${serverId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), icon_url: null }),
+    })
 
-  const res = await fetch(`/api/servers/${serverId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: name.trim(), icon_url: iconUrl }),
-  })
-
-  const data = await res.json()
-  if (!res.ok) {
-    setError(data.error)
-  } else {
-    setSuccess('Cambios guardados')
-    // Notificar al ServerList que se actualizó
-    window.dispatchEvent(new CustomEvent('server-updated'))
+    if (res.ok) {
+      setIconUrl(null)
+      setSuccess('Icono del servidor eliminado')
+      window.dispatchEvent(new CustomEvent('server-updated'))
+    } else {
+      setError('Error al eliminar el icono')
+    }
+    setUploading(false)
   }
-  setSaving(false)
-}
+
+  const handleSave = async () => {
+    if (!name.trim()) return
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    const res = await fetch(`/api/servers/${serverId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), icon_url: iconUrl }),
+    })
+
+    const data = await res.json()
+    if (!res.ok) {
+      setError(data.error)
+    } else {
+      setSuccess('Cambios guardados')
+      window.dispatchEvent(new CustomEvent('server-updated'))
+    }
+    setSaving(false)
+  }
 
   const handleDelete = async () => {
     if (deleteName !== server?.name) {
@@ -221,28 +229,28 @@ const handleSave = async () => {
   }
 
   const addRoleToMember = async (memberId: string, roleId: string) => {
-  await fetch(`/api/servers/${serverId}/members/${memberId}/roles`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role_id: roleId }),
-  })
-  setMemberRoles(prev => ({
-    ...prev,
-    [memberId]: [...(prev[memberId] ?? []), roleId],
-  }))
-}
+    await fetch(`/api/servers/${serverId}/members/${memberId}/roles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role_id: roleId }),
+    })
+    setMemberRoles(prev => ({
+      ...prev,
+      [memberId]: [...(prev[memberId] ?? []), roleId],
+    }))
+  }
 
-const removeRoleFromMember = async (memberId: string, roleId: string) => {
-  await fetch(`/api/servers/${serverId}/members/${memberId}/roles`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role_id: roleId }),
-  })
-  setMemberRoles(prev => ({
-    ...prev,
-    [memberId]: (prev[memberId] ?? []).filter(id => id !== roleId),
-  }))
-}
+  const removeRoleFromMember = async (memberId: string, roleId: string) => {
+    await fetch(`/api/servers/${serverId}/members/${memberId}/roles`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role_id: roleId }),
+    })
+    setMemberRoles(prev => ({
+      ...prev,
+      [memberId]: (prev[memberId] ?? []).filter(id => id !== roleId),
+    }))
+  }
 
   const canManage = ['owner', 'admin'].includes(currentUserRole)
 
@@ -252,45 +260,42 @@ const removeRoleFromMember = async (memberId: string, roleId: string) => {
     { id: 'roles', label: 'Roles' },
   ] as const
 
-  const chatBgInputRef = useRef<HTMLInputElement>(null)
+  const handleChatBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !currentUserId) return
 
-const handleChatBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0]
-  if (!file || !currentUserId) return
+    if (file.size > 5 * 1024 * 1024) { alert('Máximo 5MB'); return }
+    if (!file.type.startsWith('image/')) { alert('Solo imágenes'); return }
 
-  if (file.size > 5 * 1024 * 1024) { alert('Máximo 5MB'); return }
-  if (!file.type.startsWith('image/')) { alert('Solo imágenes'); return }
+    setUploading(true)
+    const ext = file.name.split('.').pop()
+    const path = `${serverId}/chat-bg-${Date.now()}.${ext}`
 
-  setUploading(true)
- const ext = file.name.split('.').pop()
- const path = `${serverId}/chat-bg-${Date.now()}.${ext}`
-
-  const { error: uploadError } = await supabase.storage
-    .from('backgrounds')
-    .upload(path, file, { upsert: true })
-
-  if (!uploadError) {
-    const { data: { publicUrl } } = supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('backgrounds')
-      .getPublicUrl(path)
+      .upload(path, file, { upsert: true })
 
-    const res = await fetch(`/api/servers/${serverId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, icon_url: iconUrl, chat_bg_url: publicUrl }),
-    })
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage
+        .from('backgrounds')
+        .getPublicUrl(path)
 
-    if (res.ok) {
-      setServer(prev => prev ? { ...prev, chat_bg_url: publicUrl } : prev)
-      setSuccess('Fondo actualizado')
+      const res = await fetch(`/api/servers/${serverId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, icon_url: iconUrl, chat_bg_url: publicUrl }),
+      })
+
+      if (res.ok) {
+        setServer(prev => prev ? { ...prev, chat_bg_url: publicUrl } : prev)
+        setSuccess('Fondo actualizado')
+      }
     }
+
+    setUploading(false)
+    if (chatBgInputRef.current) chatBgInputRef.current.value = ''
   }
 
-  setUploading(false)
-  if (chatBgInputRef.current) chatBgInputRef.current.value = ''
-}
-
-  
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-xl w-full max-w-xl shadow-xl flex flex-col max-h-[90vh]">
@@ -320,7 +325,6 @@ const handleChatBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {/* Mensajes */}
           {error && (
             <div className="bg-red-500/20 border border-red-500/50 text-red-400 text-sm px-4 py-2 rounded mb-4">
               {error}
@@ -335,7 +339,7 @@ const handleChatBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
           {/* Tab General */}
           {activeTab === 'general' && (
             <div className="flex flex-col gap-6">
-              {/* Icono */}
+              {/* Icono del Servidor */}
               <div className="flex items-center gap-4">
                 <div
                   className="relative w-20 h-20 rounded-full overflow-hidden cursor-pointer group shrink-0"
@@ -355,10 +359,18 @@ const handleChatBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
                     }
                   </div>
                 </div>
-                <div className="text-sm text-gray-400">
+                <div className="text-sm text-gray-400 flex-1">
                   <p className="font-medium text-white mb-1">Icono del servidor</p>
-                  <p>Recomendado: 512x512px</p>
-                  <p>Máximo: 2MB</p>
+                  <p>Recomendado: 512x512px (Máx: 2MB)</p>
+                  {/* NUEVO: Botón para quitar el icono */}
+                  {iconUrl && canManage && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleRemoveIcon() }}
+                      className="text-xs text-red-400 hover:text-red-300 font-medium transition-colors mt-1 block bg-transparent border-0 cursor-pointer"
+                    >
+                      Quitar icono
+                    </button>
+                  )}
                 </div>
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleIconChange} className="hidden" />
               </div>
@@ -380,69 +392,69 @@ const handleChatBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 <div>
                   <label className="text-gray-300 text-xs font-semibold uppercase tracking-wide mb-1 block">
                     Código de invitación
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
                       type="text"
                       readOnly
                       value={server.invite_code ?? ''}
                       className="flex-1 bg-gray-900 text-white px-3 py-2 rounded border border-gray-700 text-sm"
-                      />
-                      <button
+                    />
+                    <button
                       onClick={() => {
                         navigator.clipboard.writeText(server.invite_code ?? '')
                         setSuccess('Código copiado!')
                       }}
                       className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors"
-                      >
-                        Copiar
-                        </button>
-                        </div>
-                        </div>
-    )}
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+              )}
 
-    {/* Fondo del chat */}
-<div>
-  <label className="text-gray-300 text-xs font-semibold uppercase tracking-wide mb-2 block">
-    Fondo del chat
-  </label>
-  <div
-    className="relative h-24 rounded-lg cursor-pointer group overflow-hidden border border-gray-700"
-    style={{
-      backgroundColor: '#374151',
-      backgroundImage: server?.chat_bg_url ? `url(${server.chat_bg_url})` : undefined,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-    }}
-    onClick={() => chatBgInputRef.current?.click()}
-  >
-    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-      <Camera size={20} className="text-white" />
-    </div>
-    <input
-      ref={chatBgInputRef}
-      type="file"
-      accept="image/*"
-      onChange={handleChatBgChange}
-      className="hidden"
-    />
-  </div>
-  {server?.chat_bg_url && (
-    <button
-      onClick={async () => {
-        await fetch(`/api/servers/${serverId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, icon_url: iconUrl, chat_bg_url: null }),
-        })
-        setServer(prev => prev ? { ...prev, chat_bg_url: null } : prev)
-      }}
-      className="text-xs text-red-400 hover:text-red-300 mt-1 transition-colors"
-    >
-      Quitar fondo
-    </button>
-  )}
-</div>
+              {/* Fondo del chat */}
+              <div>
+                <label className="text-gray-300 text-xs font-semibold uppercase tracking-wide mb-2 block">
+                  Fondo del chat
+                </label>
+                <div
+                  className="relative h-24 rounded-lg cursor-pointer group overflow-hidden border border-gray-700"
+                  style={{
+                    backgroundColor: '#374151',
+                    backgroundImage: server?.chat_bg_url ? `url(${server.chat_bg_url})` : undefined,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                  onClick={() => chatBgInputRef.current?.click()}
+                >
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Camera size={20} className="text-white" />
+                  </div>
+                  <input
+                    ref={chatBgInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleChatBgChange}
+                    className="hidden"
+                  />
+                </div>
+                {server?.chat_bg_url && (
+                  <button
+                    onClick={async () => {
+                      await fetch(`/api/servers/${serverId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, icon_url: iconUrl, chat_bg_url: null }),
+                      })
+                      setServer(prev => prev ? { ...prev, chat_bg_url: null } : prev)
+                    }}
+                    className="text-xs text-red-400 hover:text-red-300 mt-1 transition-colors bg-transparent border-0 cursor-pointer"
+                  >
+                    Quitar fondo
+                  </button>
+                )}
+              </div>
 
               {canManage && (
                 <button
@@ -502,89 +514,88 @@ const handleChatBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
           )}
 
           {/* Tab Miembros */}
-          {/* Tab Miembros */}
-{activeTab === 'members' && (
-  <div className="flex flex-col gap-3">
-    {members.map((member) => {
-      const isMe = member.user_id === currentUserId
-      const isOwner = member.role === 'owner'
-      const canAct = canManage && !isMe && !isOwner
+          {activeTab === 'members' && (
+            <div className="flex flex-col gap-3">
+              {members.map((member) => {
+                const isMe = member.user_id === currentUserId
+                const isOwner = member.role === 'owner'
+                const canAct = canManage && !isMe && !isOwner
 
-      return (
-        <div
-          key={member.user_id}
-          className="flex flex-col gap-2 px-3 py-2 rounded bg-gray-700/50"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
-              {member.profiles.avatar_url ? (
-                <Image src={member.profiles.avatar_url} alt={member.profiles.username} width={32} height={32} className="object-cover w-full h-full" />
-              ) : (
-                <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-                  {member.profiles.username.slice(0, 2).toUpperCase()}
-                </div>
-              )}
-            </div>
-
-            <span className="flex-1 text-sm font-medium truncate" style={{ color: member.profiles.nickname_color ?? '#ffffff' }}>
-              {member.profiles.username}
-              {isMe && <span className="text-gray-400 ml-1">(tú)</span>}
-            </span>
-
-            {canAct ? (
-              <select
-                value={member.role}
-                onChange={(e) => handleRoleChange(member.user_id, e.target.value)}
-                className="bg-gray-800 text-gray-300 text-xs px-2 py-1 rounded border border-gray-600"
-              >
-                <option value="member">Miembro</option>
-                <option value="admin">Admin</option>
-              </select>
-            ) : (
-              <span className="text-xs px-2 py-1 rounded bg-gray-600/50 text-gray-400">
-                {member.role}
-              </span>
-            )}
-
-            {canAct && (
-              <div className="flex items-center gap-1">
-                <button onClick={() => handleKick(member.user_id)} className="p-1.5 text-gray-400 hover:text-yellow-400">
-                  <UserMinus size={14} />
-                </button>
-                <button onClick={() => handleBan(member.user_id)} className="p-1.5 text-gray-400 hover:text-red-400">
-                  <Ban size={14} />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {serverRoles.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {serverRoles.map((role) => {
-                const hasRole = memberRoles[member.user_id]?.includes(role.id)
                 return (
-                  <button
-                    key={role.id}
-                    onClick={() => hasRole ? removeRoleFromMember(member.user_id, role.id) : addRoleToMember(member.user_id, role.id)}
-                    className={`text-xs px-2 py-0.5 rounded-full border ${hasRole ? 'text-white' : 'border-gray-600 text-gray-400'}`}
-                    style={hasRole ? { backgroundColor: role.color } : {}}
+                  <div
+                    key={member.user_id}
+                    className="flex flex-col gap-2 px-3 py-2 rounded bg-gray-700/50"
                   >
-                    {role.name}
-                  </button>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
+                        {member.profiles.avatar_url ? (
+                          <Image src={member.profiles.avatar_url} alt={member.profiles.username} width={32} height={32} className="object-cover w-full h-full" />
+                        ) : (
+                          <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+                            {member.profiles.username.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+
+                      <span className="flex-1 text-sm font-medium truncate" style={{ color: member.profiles.nickname_color ?? '#ffffff' }}>
+                        {member.profiles.username}
+                        {isMe && <span className="text-gray-400 ml-1">(tú)</span>}
+                      </span>
+
+                      {canAct ? (
+                        <select
+                          value={member.role}
+                          onChange={(e) => handleRoleChange(member.user_id, e.target.value)}
+                          className="bg-gray-800 text-gray-300 text-xs px-2 py-1 rounded border border-gray-600"
+                        >
+                          <option value="member">Miembro</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      ) : (
+                        <span className="text-xs px-2 py-1 rounded bg-gray-600/50 text-gray-400">
+                          {member.role}
+                        </span>
+                      )}
+
+                      {canAct && (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => handleKick(member.user_id)} className="p-1.5 text-gray-400 hover:text-yellow-400 bg-transparent border-0 cursor-pointer">
+                            <UserMinus size={14} />
+                          </button>
+                          <button onClick={() => handleBan(member.user_id)} className="p-1.5 text-gray-400 hover:text-red-400 bg-transparent border-0 cursor-pointer">
+                            <Ban size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {serverRoles.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {serverRoles.map((role) => {
+                          const hasRole = memberRoles[member.user_id]?.includes(role.id)
+                          return (
+                            <button
+                              key={role.id}
+                              onClick={() => hasRole ? removeRoleFromMember(member.user_id, role.id) : addRoleToMember(member.user_id, role.id)}
+                              className={`text-xs px-2 py-0.5 rounded-full border bg-transparent cursor-pointer ${hasRole ? 'text-white' : 'border-gray-600 text-gray-400'}`}
+                              style={hasRole ? { backgroundColor: role.color } : {}}
+                            >
+                              {role.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                 )
               })}
             </div>
           )}
-        </div>
-      )
-    })}
-  </div>
-)}
 
-{/* Tab Roles */}
-{activeTab === 'roles' && (
-  <RolesEditor serverId={serverId} />
-)}
+          {/* Tab Roles */}
+          {activeTab === 'roles' && (
+            <RolesEditor serverId={serverId} />
+          )}
 
         </div>
       </div>

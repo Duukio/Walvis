@@ -12,6 +12,7 @@ type Profile = {
   banner_url: string | null
   status: string
   nickname_color: string | null
+  bio: string | null // NUEVO
 }
 
 type Role = {
@@ -34,10 +35,9 @@ export default function UserProfilePopup({
   const supabase = createClient()
   const popupRef = useRef<HTMLDivElement>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [nickname, setNickname] = useState<string | null>(null) // NUEVO: Apodo local
   const [roles, setRoles] = useState<Role[]>([])
   const [position, setPosition] = useState({ top: 0, left: 0 })
-  
-
 
   const STATUS_LABELS: Record<string, string> = {
     online: 'Disponible',
@@ -47,17 +47,29 @@ export default function UserProfilePopup({
   }
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchProfileAndServerData = async () => {
+      // 1. Cargar datos del perfil incluyendo la nueva columna BIO
       const { data } = await supabase
         .from('profiles')
-        .select('id, username, avatar_url, banner_url, status, nickname_color')
+        .select('id, username, avatar_url, banner_url, status, nickname_color, bio')
         .eq('id', userId)
         .single()
 
       if (data) setProfile(data)
 
-      // Cargar roles si estamos en un servidor
+      // 2. Si estamos en un contexto de servidor, cargar roles y apodo
       if (serverId) {
+        // Traer apodo local
+        const { data: memberData } = await supabase
+          .from('members')
+          .select('nickname')
+          .eq('server_id', serverId)
+          .eq('user_id', userId)
+          .single()
+
+        if (memberData) setNickname(memberData.nickname)
+
+        // Traer roles del miembro
         const { data: memberRoles } = await supabase
           .from('member_roles')
           .select('role_id')
@@ -77,7 +89,7 @@ export default function UserProfilePopup({
       }
     }
 
-    fetchProfile()
+    fetchProfileAndServerData()
   }, [userId, serverId])
 
   // Posicionar el popup cerca del elemento clickeado
@@ -101,6 +113,10 @@ export default function UserProfilePopup({
   }, [onClose])
 
   if (!profile) return null
+
+  // Si tiene apodo local en el server, lo usa de título principal
+  const hasNickname = !!nickname
+  const mainDisplay = nickname || profile.username
 
   return (
     <div
@@ -126,14 +142,14 @@ export default function UserProfilePopup({
             {profile.avatar_url ? (
               <Image
                 src={profile.avatar_url}
-                alt={profile.username}
+                alt={mainDisplay}
                 width={64}
                 height={64}
                 className="object-cover w-full h-full"
               />
             ) : (
               <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xl font-bold text-white">
-                {profile.username.slice(0, 2).toUpperCase()}
+                {mainDisplay.slice(0, 2).toUpperCase()}
               </div>
             )}
           </div>
@@ -142,21 +158,39 @@ export default function UserProfilePopup({
           </div>
         </div>
 
-        {/* Nombre */}
-        <p
-          className="text-lg font-bold mt-2"
-          style={{ color: profile.nickname_color ?? '#ffffff' }}
-        >
-          {profile.username}
-        </p>
+        {/* Nombres (Apodo prioritario + nombre de usuario abajo si difieren) */}
+        <div className="mt-2 flex flex-col">
+          <p
+            className="text-lg font-bold leading-tight"
+            style={{ color: profile.nickname_color ?? '#ffffff' }}
+          >
+            {mainDisplay}
+          </p>
+          {hasNickname && (
+            <p className="text-gray-400 text-xs font-medium">
+              {profile.username}
+            </p>
+          )}
+        </div>
 
         {/* Estado */}
-        <p className="text-gray-400 text-xs">{STATUS_LABELS[profile.status] ?? profile.status}</p>
-        
+        <p className="text-gray-400 text-xs mt-1">{STATUS_LABELS[profile.status] ?? profile.status}</p>
+
+        {/* NUEVO: Descripción de Perfil (Bio) */}
+        {profile.bio && (
+          <div className="mt-3 pt-3 border-t border-gray-800">
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-1">
+              Sobre mí
+            </p>
+            <p className="text-gray-200 text-xs whitespace-pre-wrap break-words leading-normal">
+              {profile.bio}
+            </p>
+          </div>
+        )}
 
         {/* Roles */}
         {roles.length > 0 && (
-          <div className="mt-3">
+          <div className="mt-3 pt-3 border-t border-gray-800">
             <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-1.5">
               Roles
             </p>
@@ -164,7 +198,7 @@ export default function UserProfilePopup({
               {roles.map((role) => (
                 <span
                   key={role.id}
-                  className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                  className="text-[10px] px-2 py-0.5 rounded-full text-white font-semibold tracking-wide"
                   style={{ backgroundColor: role.color }}
                 >
                   {role.name}

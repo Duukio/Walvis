@@ -10,6 +10,15 @@ type Profile = {
   username: string
   nickname_color: string
   theme: string
+  bio: string | null
+}
+
+type ServerMember = {
+  server_id: string
+  nickname: string | null
+  servers: {
+    name: string
+  } | null
 }
 
 const PRESET_COLORS = [
@@ -26,6 +35,13 @@ export default function SettingsPage() {
   const [username, setUsername] = useState('')
   const [nicknameColor, setNicknameColor] = useState('#ffffff')
   const [theme, setTheme] = useState('dark')
+  const [bio, setBio] = useState('') // Estado para la Bio
+  
+  // Estados para manejar los apodos por servidor
+  const [myServers, setMyServers] = useState<ServerMember[]>([])
+  const [selectedServerId, setSelectedServerId] = useState<string>('')
+  const [nickname, setNickname] = useState('')
+
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [saving, setSaving] = useState(false)
@@ -35,24 +51,57 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'security'>('profile')
 
   useEffect(() => {
-    fetchProfile()
+    fetchProfileAndServers()
   }, [])
 
-  const fetchProfile = async () => {
+  // Carga inicial del perfil global y los servidores a los que pertenece
+  const fetchProfileAndServers = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data } = await supabase
+    // Traer perfil incluyendo la nueva columna 'bio'
+    const { data: profileData } = await supabase
       .from('profiles')
-      .select('username, nickname_color, theme')
+      .select('username, nickname_color, theme, bio')
       .eq('id', user.id)
       .single()
 
-    if (data) {
-      setUsername(data.username)
-      setNicknameColor(data.nickname_color ?? '#ffffff')
-      setTheme(data.theme ?? 'dark')
+    if (profileData) {
+      setUsername(profileData.username)
+      setNicknameColor(profileData.nickname_color ?? '#ffffff')
+      setTheme(profileData.theme ?? 'dark')
+      setBio(profileData.bio ?? '')
     }
+
+    // Traer la lista de servidores donde el usuario es miembro junto con su apodo actual
+    const { data: serversData } = await supabase
+      .from('members')
+      .select(`
+        server_id,
+        nickname,
+        servers ( name )
+      `)
+      .eq('user_id', user.id)
+
+    if (serversData && serversData.length > 0) {
+      // Normalizamos el mapeo por si Supabase anida la relación como un array u objeto simple
+      const formatted: ServerMember[] = serversData.map((s: any) => ({
+        server_id: s.server_id,
+        nickname: s.nickname,
+        servers: Array.isArray(s.servers) ? s.servers[0] : s.servers
+      }))
+
+      setMyServers(formatted)
+      setSelectedServerId(formatted[0].server_id)
+      setNickname(formatted[0].nickname ?? '')
+    }
+  }
+
+  // Detecta el cambio en el select de servidores para actualizar el input del apodo
+  const handleServerChange = (serverId: string) => {
+    setSelectedServerId(serverId)
+    const target = myServers.find(s => s.server_id === serverId)
+    setNickname(target?.nickname ?? '')
   }
 
   const handleSaveProfile = async () => {
@@ -61,20 +110,51 @@ export default function SettingsPage() {
     setErrorMsg(null)
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({ username, nickname_color: nicknameColor, theme })
-      .eq('id', user.id)
-
-    if (error) {
-      setErrorMsg(error.message)
-    } else {
-      applyTheme(theme)
-      setSuccessMsg('Cambios guardados correctamente')
+    if (!user) {
+      setSaving(false)
+      return
     }
 
+    // 1. Guardar cambios globales del perfil (incluye la Bio)
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ username, nickname_color: nicknameColor, theme, bio: bio.trim() })
+      .eq('id', user.id)
+
+    if (profileError) {
+      setErrorMsg(profileError.message)
+      setSaving(false)
+      return
+    }
+
+    // 2. Guardar el apodo local si hay un servidor seleccionado (Cambiado a UPSERT seguro)
+    if (selectedServerId) {
+      const currentNicknameValue = nickname.trim() || null
+
+      const { error: nicknameError } = await supabase
+        .from('members')
+        .upsert({ 
+          server_id: selectedServerId,
+          user_id: user.id,
+          nickname: currentNicknameValue 
+        }, {
+          onConflict: 'user_id,server_id'
+        })
+
+      if (nicknameError) {
+        setErrorMsg(nicknameError.message)
+        setSaving(false)
+        return
+      }
+
+      // Actualizar el estado local de los servidores para que refleje el cambio de inmediato
+      setMyServers(prev => prev.map(s => 
+        s.server_id === selectedServerId ? { ...s, nickname: currentNicknameValue } : s
+      ))
+    }
+
+    applyTheme(theme)
+    setSuccessMsg('Cambios guardados correctamente')
     setSaving(false)
   }
 
@@ -165,6 +245,7 @@ export default function SettingsPage() {
         {/* Tab: Perfil */}
         {activeTab === 'profile' && (
           <div className="bg-gray-800 rounded-lg p-6 flex flex-col gap-6">
+            {/* Nombre de usuario */}
             <div>
               <label className="text-gray-300 text-xs font-semibold uppercase tracking-wide mb-1 block">
                 Nombre de usuario
@@ -177,17 +258,71 @@ export default function SettingsPage() {
               />
             </div>
 
+            {/* Descripción de Perfil (Bio) */}
+            <div>
+              <label className="text-gray-300 text-xs font-semibold uppercase tracking-wide mb-1 block">
+                Descripción de perfil (Bio)
+              </label>
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="Contanos un poco sobre vos..."
+                rows={3}
+                maxLength={160}
+                className="w-full bg-gray-900 text-white px-3 py-2 rounded border border-gray-700 focus:outline-none focus:border-indigo-500 text-sm resize-none"
+              />
+            </div>
+
+            {/* Apodos por Servidor */}
+            {myServers.length > 0 && (
+              <div className="border-t border-gray-700/50 pt-4 flex flex-col gap-4">
+                <h3 className="text-sm font-semibold text-gray-200">Apodos del Servidor</h3>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-gray-400 text-xs mb-1 block">Seleccionar servidor</label>
+                    <select
+                      value={selectedServerId}
+                      onChange={(e) => handleServerChange(e.target.value)}
+                      className="w-full bg-gray-900 text-white px-3 py-2 rounded border border-gray-700 focus:outline-none focus:border-indigo-500 text-sm h-9"
+                    >
+                      {myServers.map((s) => (
+                        <option key={s.server_id} value={s.server_id}>
+                          {s.servers?.name || 'Servidor Desconocido'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-gray-400 text-xs mb-1 block">Apodo local</label>
+                    <input
+                      type="text"
+                      value={nickname}
+                      onChange={(e) => setNickname(e.target.value)}
+                      placeholder={username}
+                      className="w-full bg-gray-900 text-white px-3 py-2 rounded border border-gray-700 focus:outline-none focus:border-indigo-500 text-sm h-9"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Vista previa con Apodo prioritario */}
             <div>
               <label className="text-gray-300 text-xs font-semibold uppercase tracking-wide mb-2 block">
-                Vista previa
+                Vista previa en chat
               </label>
               <div className="bg-gray-900 rounded p-3 flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold">
-                  {username.slice(0, 2).toUpperCase()}
+                  {(nickname || username).slice(0, 2).toUpperCase()}
                 </div>
-                <span className="text-sm font-medium" style={{ color: nicknameColor }}>
-                  {username || 'Usuario'}
-                </span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium" style={{ color: nicknameColor }}>
+                    {nickname || username || 'Usuario'}
+                  </span>
+                  {bio && <span className="text-xs text-gray-400 truncate max-w-100">{bio}</span>}
+                </div>
               </div>
             </div>
 
