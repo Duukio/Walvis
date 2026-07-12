@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { hasSupabaseEnv, missingSupabaseEnvMessage } from '@/lib/supabase/env'
 import Link from 'next/link'
 
 export default function RegisterPage() {
@@ -18,6 +19,12 @@ export default function RegisterPage() {
   const handleRegister = async () => {
     setLoading(true)
     setError(null)
+
+    if (!hasSupabaseEnv()) {
+      setError(missingSupabaseEnvMessage)
+      setLoading(false)
+      return
+    }
 
     const supabase = createClient()
     const { data, error } = await supabase.auth.signUp({

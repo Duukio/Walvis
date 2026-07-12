@@ -1,7 +1,10 @@
 import { createBrowserClient } from '@supabase/ssr'
+import { missingSupabaseEnvMessage, supabasePublishableKey, supabaseUrl } from './env'
 
-export const createClient = () =>
-  createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-  )
+export const createClient = () => {
+  if (!supabaseUrl || !supabasePublishableKey) {
+    throw new Error(missingSupabaseEnvMessage)
+  }
+
+  return createBrowserClient(supabaseUrl, supabasePublishableKey)
+}
