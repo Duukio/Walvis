@@ -50,18 +50,6 @@ npm install
 
 Creá un archivo `.env.local` en la raíz del proyecto:
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
-# Usá una de estas claves públicas de Supabase:
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu_publishable_key
-# o si tu proyecto ya la tiene con este nombre:
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=tu_publishable_default_key
-# o en proyectos antiguos:
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_anon_key
-```
-
-En Vercel, agregá `NEXT_PUBLIC_SUPABASE_URL` y al menos una de las claves públicas anteriores en **Project Settings → Environment Variables** para Production, Preview y Development. Si cambiás variables, hacé un redeploy para que Next.js las incluya en el build.
-
 ### 4. Configurá Supabase
 
 en el **SQL Editor** de supabase configura los parametros de la Base de datos.
