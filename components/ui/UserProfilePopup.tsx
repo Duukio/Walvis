@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import StatusIndicator from './StatusIndicator'
+import { UserPlus, UserCheck, Clock, Loader2, UserX } from 'lucide-react'
 
 type Profile = {
   id: string
@@ -12,7 +13,7 @@ type Profile = {
   banner_url: string | null
   status: string
   nickname_color: string | null
-  bio: string | null // NUEVO
+  bio: string | null
 }
 
 type Role = {
@@ -20,6 +21,8 @@ type Role = {
   name: string
   color: string
 }
+
+type FriendStatus = 'none' | 'pending_sent' | 'pending_received' | 'accepted'
 
 export default function UserProfilePopup({
   userId,
@@ -35,41 +38,69 @@ export default function UserProfilePopup({
   const supabase = createClient()
   const popupRef = useRef<HTMLDivElement>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [nickname, setNickname] = useState<string | null>(null) // NUEVO: Apodo local
+  const [nickname, setNickname] = useState<string | null>(null)
   const [roles, setRoles] = useState<Role[]>([])
   const [position, setPosition] = useState({ top: 0, left: 0 })
+
+  // Estados para controlar el flujo de amistades
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [friendStatus, setFriendStatus] = useState<FriendStatus>('none')
+  const [loadingFriendship, setLoadingFriendship] = useState(false)
 
   const STATUS_LABELS: Record<string, string> = {
     online: 'Disponible',
     away: 'Ausente',
-    dnd: 'Do not disturb',
+    dnd: 'No molestar',
     invisible: 'Invisible',
   }
 
   useEffect(() => {
     const fetchProfileAndServerData = async () => {
-      // 1. Cargar datos del perfil incluyendo la nueva columna BIO
-      const { data } = await supabase
+      // Obtener el ID del usuario logueado actualmente
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) setCurrentUserId(user.id)
+
+      // 1. Cargar datos del perfil incluyendo la columna BIO
+      const { data: profileData } = await supabase
         .from('profiles')
         .select('id, username, avatar_url, banner_url, status, nickname_color, bio')
         .eq('id', userId)
         .single()
 
-      if (data) setProfile(data)
+      if (profileData) setProfile(profileData)
 
-      // 2. Si estamos en un contexto de servidor, cargar roles y apodo
+      // 2. Comprobar el estado de amistad existente si no es tu propio perfil
+      if (user && user.id !== userId) {
+        const { data: friendships } = await supabase
+          .from('friendships')
+          .select('sender_id, receiver_id, status')
+          .or(`and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`)
+
+        if (friendships && friendships.length > 0) {
+          const relation = friendships[0]
+          if (relation.status === 'accepted') {
+            setFriendStatus('accepted')
+          } else if (relation.status === 'pending') {
+            if (relation.sender_id === user.id) {
+              setFriendStatus('pending_sent')
+            } else {
+              setFriendStatus('pending_received')
+            }
+          }
+        }
+      }
+
+      // 3. Si estamos en un contexto de servidor, cargar roles y apodo
       if (serverId) {
-        // Traer apodo local
         const { data: memberData } = await supabase
           .from('members')
           .select('nickname')
           .eq('server_id', serverId)
           .eq('user_id', userId)
-          .single()
+          .maybeSingle() // Usamos maybeSingle para evitar excepciones si arroja vacío
 
         if (memberData) setNickname(memberData.nickname)
 
-        // Traer roles del miembro
         const { data: memberRoles } = await supabase
           .from('member_roles')
           .select('role_id')
@@ -91,6 +122,44 @@ export default function UserProfilePopup({
 
     fetchProfileAndServerData()
   }, [userId, serverId])
+
+  // Lógica interactiva para procesar las amistades
+  const handleFriendAction = async () => {
+    if (!currentUserId || !profile || loadingFriendship) return
+    setLoadingFriendship(true)
+
+    try {
+      if (friendStatus === 'none') {
+        // Enviar una solicitud inicial
+        const { error } = await supabase
+          .from('friendships')
+          .insert({ sender_id: currentUserId, receiver_id: profile.id, status: 'pending' })
+        
+        if (!error) setFriendStatus('pending_sent')
+      } else if (friendStatus === 'pending_received') {
+        // Aceptar una solicitud entrante
+        const { error } = await supabase
+          .from('friendships')
+          .update({ status: 'accepted' })
+          .eq('sender_id', profile.id)
+          .eq('receiver_id', currentUserId)
+        
+        if (!error) setFriendStatus('accepted')
+      } else if (friendStatus === 'accepted' || friendStatus === 'pending_sent') {
+        // Cancelar la enviada o eliminar amigo definitivo
+        const { error } = await supabase
+          .from('friendships')
+          .delete()
+          .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${profile.id}),and(sender_id.eq.${profile.id},receiver_id.eq.${currentUserId})`)
+        
+        if (!error) setFriendStatus('none')
+      }
+    } catch (err) {
+      console.error('Error al actualizar relación de amistad:', err)
+    } finally {
+      setLoadingFriendship(false)
+    }
+  }
 
   // Posicionar el popup cerca del elemento clickeado
   useEffect(() => {
@@ -114,14 +183,14 @@ export default function UserProfilePopup({
 
   if (!profile) return null
 
-  // Si tiene apodo local en el server, lo usa de título principal
   const hasNickname = !!nickname
   const mainDisplay = nickname || profile.username
+  const isMe = currentUserId === profile.id
 
   return (
     <div
       ref={popupRef}
-      className="fixed z-50 w-72 bg-gray-900 rounded-xl shadow-2xl overflow-hidden border border-gray-700"
+      className="fixed z-50 w-72 bg-gray-900 rounded-xl shadow-2xl overflow-hidden border border-gray-700 text-white"
       style={{ top: position.top, left: position.left }}
     >
       {/* Banner */}
@@ -135,9 +204,10 @@ export default function UserProfilePopup({
         }}
       />
 
-      {/* Avatar */}
-      <div className="px-4 pb-4 relative">
-        <div className="relative -mt-8 w-16 h-16 inline-block">
+{/* Contenedor del Avatar y Acciones Superiores */}
+      <div className="px-4 relative flex items-start justify-between">
+        {/* Avatar */}
+        <div className="relative -mt-8 w-16 h-16 inline-block shrink-0">
           <div className="w-full h-full rounded-full overflow-hidden border-4 border-gray-900">
             {profile.avatar_url ? (
               <Image
@@ -158,7 +228,66 @@ export default function UserProfilePopup({
           </div>
         </div>
 
-        {/* Nombres (Apodo prioritario + nombre de usuario abajo si difieren) */}
+        {/* ZONA MARCADA EN ROJO: Botón de Amistad alineado arriba a la derecha */}
+        {!isMe && currentUserId && (
+          <div className="mt-2">
+            <button
+              onClick={handleFriendAction}
+              disabled={loadingFriendship}
+              title={
+                friendStatus === 'none' 
+                  ? 'Enviar solicitud' 
+                  : friendStatus === 'pending_sent' 
+                  ? 'Cancelar solicitud' 
+                  : friendStatus === 'pending_received' 
+                  ? 'Aceptar solicitud' 
+                  : 'Eliminar amigo'
+              }
+              className={`py-1 px-2.5 rounded text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border bg-transparent cursor-pointer group ${
+                friendStatus === 'none'
+                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-transparent'
+                  : friendStatus === 'pending_sent'
+                  ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-red-950/40 hover:text-red-400 hover:border-red-500/30'
+                  : friendStatus === 'pending_received'
+                  ? 'bg-green-600 hover:bg-green-500 text-white border-transparent animate-pulse'
+                  : 'text-green-400 border-green-500/20 hover:bg-red-950/40 hover:text-red-400 hover:border-red-500/30'
+              }`}
+            >
+              {loadingFriendship ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : friendStatus === 'none' ? (
+                <>
+                  <UserPlus size={13} />
+                  <span>Agregar</span>
+                </>
+              ) : friendStatus === 'pending_sent' ? (
+                <>
+                  <Clock size={13} className="inline group-hover:hidden" />
+                  <UserX size={13} className="hidden group-hover:inline" />
+                  <span className="inline group-hover:hidden">Enviada</span>
+                  <span className="hidden group-hover:inline">Cancelar</span>
+                </>
+              ) : friendStatus === 'pending_received' ? (
+                <>
+                  <UserPlus size={13} />
+                  <span>Aceptar</span>
+                </>
+              ) : (
+                <>
+                  <UserCheck size={13} className="inline group-hover:hidden" />
+                  <UserX size={13} className="hidden group-hover:inline" />
+                  <span className="inline group-hover:hidden">Amigos</span>
+                  <span className="hidden group-hover:inline">Eliminar</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Bloque de Información Inferior (Nombres, Bio, Roles) */}
+      <div className="px-4 pb-4">
+        {/* Nombres */}
         <div className="mt-2 flex flex-col">
           <p
             className="text-lg font-bold leading-tight"
@@ -176,7 +305,7 @@ export default function UserProfilePopup({
         {/* Estado */}
         <p className="text-gray-400 text-xs mt-1">{STATUS_LABELS[profile.status] ?? profile.status}</p>
 
-        {/* NUEVO: Descripción de Perfil (Bio) */}
+        {/* Descripción de Perfil (Bio) */}
         {profile.bio && (
           <div className="mt-3 pt-3 border-t border-gray-800">
             <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-1">

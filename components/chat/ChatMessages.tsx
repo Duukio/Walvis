@@ -66,40 +66,72 @@ export default function ChatMessages({ channelId, serverId }: { channelId: strin
     fetchUser()
   }, [channelId, serverId])
 
-  useEffect(() => {
+useEffect(() => {
     const fetchMessages = async () => {
       setLoading(true)
-      const { data } = await supabase
-        .from('messages')
-        .select(`
-          id,
-          content,
-          created_at,
-          user_id,
-          edited,
-          reply_to,
-          attachments,
-          profiles (
-            username,
-            avatar_url,
-            status,
-            nickname_color,
-            bio
-          ),
-          members!inner (
-            nickname
-          )
-        `)
-        .eq('channel_id', channelId)
-        .eq('members.server_id', serverId)
-        .order('created_at', { ascending: true })
-        .limit(50)
+      try {
+        // 1. Traer los mensajes planos junto con el perfil global del usuario (Sin joins conflictivos)
+        const { data: messagesData, error: messagesError } = await supabase
+          .from('messages')
+          .select(`
+            id,
+            content,
+            created_at,
+            user_id,
+            edited,
+            reply_to,
+            attachments,
+            profiles (
+              username,
+              avatar_url,
+              status,
+              nickname_color,
+              bio
+            )
+          `)
+          .eq('channel_id', channelId)
+          .order('created_at', { ascending: true })
+          .limit(50)
 
-      if (data) setMessages(data as unknown as Message[])
-      setLoading(false)
+        if (messagesError) throw messagesError
+
+        if (messagesData && messagesData.length > 0) {
+          // 2. Traer todos los apodos de los miembros de este servidor específico de una sola pasada
+          const { data: membersData } = await supabase
+            .from('members')
+            .select('user_id, nickname')
+            .eq('server_id', serverId)
+
+          // Creamos un diccionario en memoria para buscar apodos en O(1) de forma ultra veloz
+          const nicknameMap: Record<string, string | null> = {}
+          if (membersData) {
+            membersData.forEach((m) => {
+              nicknameMap[m.user_id] = m.nickname
+            })
+          }
+
+          // 3. Cruzamos los datos e inyectamos la propiedad 'members' idéntica a como la espera tu interfaz
+          const formattedMessages = messagesData.map((msg: any) => ({
+            ...msg,
+            members: {
+              nickname: nicknameMap[msg.user_id] ?? null
+            }
+          }))
+
+          setMessages(formattedMessages)
+        } else {
+          setMessages([])
+        }
+      } catch (err) {
+        console.error('Error al cargar mensajes del canal:', err)
+      } finally {
+        setLoading(false)
+      }
     }
 
-    fetchMessages()
+    if (channelId && serverId) {
+      fetchMessages()
+    }
   }, [channelId, serverId])
 
   useEffect(() => {

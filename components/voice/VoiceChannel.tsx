@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
-  Call,
   CallingState,
   ParticipantView,
   StreamCall,
@@ -25,50 +24,33 @@ export default function VoiceChannel({
   isVideo?: boolean
 }) {
   const client = useStreamVideoClient()
-  const { activeCall, setActiveCall } = useStreamContext()
+  const { activeCall, joinVoiceChannel, leaveVoiceChannel } = useStreamContext()
   const [loading, setLoading] = useState(true)
+  const mountedIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!client) return
 
-    const joinCall = async () => {
+    // Evita la doble ejecución en paralelo causada por React.StrictMode
+    if (mountedIdRef.current === channelId) return
+    mountedIdRef.current = channelId
+
+    let isCurrentMount = true
+
+    const connect = async () => {
       setLoading(true)
-      try {
-        // Ya estamos en este canal
-        if (activeCall?.id === channelId) {
-          setLoading(false)
-          return
-        }
-
-        // Salir de otra llamada activa primero
-        if (activeCall && activeCall.id !== channelId) {
-          await activeCall.leave().catch(() => {})
-          setActiveCall(null)
-        }
-
-        const callInstance = client.call('default', channelId)
-        await callInstance.join({ create: true })
-        setActiveCall(callInstance)
-      } catch (err) {
-        console.error('Error al unirse al canal:', err)
-      } finally {
-        setLoading(false)
-      }
+      await joinVoiceChannel(channelId)
+      if (isCurrentMount) setLoading(false)
     }
 
-    joinCall()
+    connect()
+
+    return () => {
+      isCurrentMount = false
+      mountedIdRef.current = null
+      leaveVoiceChannel()
+    }
   }, [client, channelId])
-
-  useEffect(() => {
-    const handler = async () => {
-      if (activeCall) {
-        await activeCall.leave().catch(() => {})
-        setActiveCall(null)
-      }
-    }
-    window.addEventListener('leave-call', handler)
-    return () => window.removeEventListener('leave-call', handler)
-  }, [activeCall])
 
   if (!client || loading) {
     return (
@@ -79,10 +61,10 @@ export default function VoiceChannel({
     )
   }
 
-  if (!activeCall) {
+  if (!activeCall || activeCall.id !== channelId) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-        No se pudo conectar al canal
+        No se pudo conectar al canal de voz
       </div>
     )
   }
@@ -94,17 +76,16 @@ export default function VoiceChannel({
   )
 }
 
-function CustomCallControls({ channelId }: { channelId: string }) {
+function CustomCallControls() {
   const call = useCall()
   const router = useRouter()
-  const { setActiveCall } = useStreamContext()
+  const { leaveVoiceChannel } = useStreamContext()
   const { useMicrophoneState, useCameraState } = useCallStateHooks()
   const { microphone, isMute: isMicMuted } = useMicrophoneState()
   const { camera, isMute: isCamMuted } = useCameraState()
 
   const handleLeave = async () => {
-    await call?.leave()
-    setActiveCall(null)
+    await leaveVoiceChannel()
     const serverId = window.location.pathname.split('/')[2]
     router.push(`/servers/${serverId}`)
   }
@@ -187,16 +168,21 @@ function VoiceCallUI({
         ) : (
           <div className="flex flex-col gap-2">
             {participants.map((participant) => {
-              const isMicMuted = !participant.publishedTracks?.includes(2)
+              // Comprobación de tracks tipada de manera segura para TypeScript
+              const isAudioEnabled = participant.publishedTracks.includes('audio' as any) || participant.publishedTracks.includes(2 as any);
+              const isSpeaking = participant.isSpeaking;
+
               return (
                 <div key={participant.sessionId}>
-                  <div className="hidden">
+                  {/* Forzamos renderizado real de 1px fuera de pantalla para activar los tracks de audio de WebRTC */}
+                  <div className="opacity-0 absolute top-[-9999px] left-[-9999px] w-px h-px pointer-events-none">
                     <ParticipantView participant={participant} />
                   </div>
+                  
                   <div className="flex items-center gap-3 px-3 py-2 rounded bg-gray-600/50">
                     <div className={`relative w-10 h-10 rounded-full shrink-0 transition-all duration-200 ${
-                      participant.isSpeaking
-                        ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-gray-600'
+                      isSpeaking
+                        ? 'ring-2 ring-green-450 ring-offset-2 ring-offset-gray-600'
                         : 'ring-2 ring-transparent'
                     }`}>
                       {participant.image ? (
@@ -207,9 +193,15 @@ function VoiceCallUI({
                         </div>
                       )}
                     </div>
+                    
                     <span className="text-gray-200 text-sm flex-1">{participant.name ?? 'Usuario'}</span>
+                    
                     <div className={`w-2.5 h-2.5 rounded-full transition-colors duration-200 ${
-                      participant.isSpeaking ? 'bg-green-400 animate-pulse' : isMicMuted ? 'bg-red-500' : 'bg-gray-500'
+                      isSpeaking 
+                        ? 'bg-green-400 animate-pulse' 
+                        : !isAudioEnabled 
+                        ? 'bg-red-500' 
+                        : 'bg-gray-500'
                     }`} />
                   </div>
                 </div>
@@ -223,7 +215,7 @@ function VoiceCallUI({
       </div>
 
       <div className="border-t border-gray-600 p-4 flex justify-center bg-gray-800">
-        <CustomCallControls channelId={channelId} />
+        <CustomCallControls />
       </div>
     </div>
   )
