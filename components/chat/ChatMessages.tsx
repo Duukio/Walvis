@@ -8,7 +8,7 @@ import { Pencil, Trash2, Check, X, Paperclip, Reply } from 'lucide-react'
 import Image from 'next/image'
 import StatusIndicator from '@/components/ui/StatusIndicator'
 import UserProfilePopup from '@/components/ui/UserProfilePopup'
-import MessageInput from '@/components/chat/MessageInput'
+import { playSound } from '@/lib/utils/sound' // <-- IMPORTAMOS EL HELPER DE SONIDO
 
 type Message = {
   id: string
@@ -40,11 +40,15 @@ export default function ChatMessages({ channelId, serverId }: { channelId: strin
   const [replyTo, setReplyTo] = useState<{ id: string; username: string; content: string } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
+  // Referencia mutable para tener el ID de usuario siempre actualizado dentro del listener de Supabase
+  const currentUserIdRef = useRef<string | null>(null)
+
   useEffect(() => {
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       setCurrentUserId(user.id)
+      currentUserIdRef.current = user.id
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -66,11 +70,10 @@ export default function ChatMessages({ channelId, serverId }: { channelId: strin
     fetchUser()
   }, [channelId, serverId])
 
-useEffect(() => {
+  useEffect(() => {
     const fetchMessages = async () => {
       setLoading(true)
       try {
-        // 1. Traer los mensajes planos junto con el perfil global del usuario que los envió
         const { data: messagesData, error: messagesError } = await supabase
           .from('messages')
           .select(`
@@ -96,13 +99,11 @@ useEffect(() => {
         if (messagesError) throw messagesError
 
         if (messagesData && messagesData.length > 0) {
-          // 2. Traer todos los apodos de los miembros de este servidor específico de una sola pasada
           const { data: membersData } = await supabase
             .from('members')
             .select('user_id, nickname')
             .eq('server_id', serverId)
 
-          // Creamos un diccionario en memoria para buscar apodos en O(1) de forma ultra veloz
           const nicknameMap: Record<string, string | null> = {}
           if (membersData) {
             membersData.forEach((m) => {
@@ -110,7 +111,6 @@ useEffect(() => {
             })
           }
 
-          // 3. Cruzamos los datos e inyectamos la propiedad 'members' idéntica a como la espera tu interfaz
           const formattedMessages = messagesData.map((msg: any) => ({
             ...msg,
             members: {
@@ -141,6 +141,11 @@ useEffect(() => {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `channel_id=eq.${channelId}` },
         async (payload) => {
+          //DISPARAMOS EL EFECTO DE SONIDO: Solo si el mensaje lo mandó otro usuario
+          if (payload.new.user_id !== currentUserIdRef.current) {
+            playSound('/sounds/message-notification.wav')
+          }
+
           const { data: profile } = await supabase
             .from('profiles')
             .select('username, avatar_url, status, nickname_color, bio')
@@ -207,13 +212,13 @@ useEffect(() => {
     )
   }
 
-if (messages.length === 0) {
-  return (
-    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-      No hay mensajes todavía. ¡Sé el primero en escribir!
-    </div>
-  )
-}
+  if (messages.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+        No hay mensajes todavía. ¡Sé el primero en escribir!
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

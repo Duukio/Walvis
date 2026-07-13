@@ -2,6 +2,7 @@
 
 import { useEffect, useState, createContext, useContext } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { playSound } from '@/lib/utils/sound' // <-- IMPORTAMOS LA FUNCIÓN HELPER
 
 type Notification = {
   id: string
@@ -41,12 +42,10 @@ export default function NotificationProvider({ children }: { children: React.Rea
       if (!user) return
       setUserId(user.id)
 
-      // Pedir permiso para notificaciones del navegador
       if ('Notification' in window && Notification.permission === 'default') {
         await Notification.requestPermission()
       }
 
-      // Cargar notificaciones existentes
       const { data } = await supabase
         .from('notifications')
         .select('*')
@@ -76,6 +75,9 @@ export default function NotificationProvider({ children }: { children: React.Rea
         (payload) => {
           const notification = payload.new as Notification
           setNotifications(prev => [notification, ...prev])
+
+          //Aca suena el sonido cuando llega una notificación, duh
+          playSound('/sounds/notification-sound.wav')
 
           if ('Notification' in window && Notification.permission === 'granted') {
             new Notification(notification.title, {

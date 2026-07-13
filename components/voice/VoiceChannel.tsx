@@ -175,7 +175,7 @@ function VoiceCallUI({
               return (
                 <div key={participant.sessionId}>
                   {/* Forzamos renderizado real de 1px fuera de pantalla para activar los tracks de audio de WebRTC */}
-                  <div className="opacity-0 absolute top-[-9999px] left-[-9999px] w-px h-px pointer-events-none">
+                  <div className="opacity-0 absolute top-9999px left-9999px w-px h-px pointer-events-none">
                     <ParticipantView participant={participant} />
                   </div>
                   
