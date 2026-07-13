@@ -70,7 +70,7 @@ useEffect(() => {
     const fetchMessages = async () => {
       setLoading(true)
       try {
-        // 1. Traer los mensajes planos junto con el perfil global del usuario (Sin joins conflictivos)
+        // 1. Traer los mensajes planos junto con el perfil global del usuario que los envió
         const { data: messagesData, error: messagesError } = await supabase
           .from('messages')
           .select(`
