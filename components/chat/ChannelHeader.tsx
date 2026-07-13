@@ -110,17 +110,6 @@ export default function ChannelHeader({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
-        {canDeleteChannel && (
-          <button
-            onClick={handleDeleteChannel}
-            className="p-1.5 text-gray-400 hover:text-red-400 rounded hover:bg-gray-600/50 transition-colors mr-1"
-            title="Eliminar canal"
-          >
-            <Trash2 size={16} />
-          </button>
-        )}
-
         <button
           onClick={onToggleMembers}
           className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${
@@ -134,6 +123,5 @@ export default function ChannelHeader({
           <span>{memberCount}</span>
         </button>
       </div>
-    </div>
   )
 }

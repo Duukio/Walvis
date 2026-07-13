@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { X, Camera, Save, Trash2, UserMinus, Ban, Loader2 } from 'lucide-react'
+// MODIFICADO: Agregamos Hash, Volume2 y Video desde lucide-react
+import { X, Camera, Save, Trash2, UserMinus, Ban, Loader2, Hash, Volume2, Video } from 'lucide-react'
 import Image from 'next/image'
 import RolesEditor from '@/components/modals/RolesEditor'
 
@@ -26,6 +27,12 @@ type Server = {
   chat_bg_url: string | null
 }
 
+type Channel = {
+  id: string
+  name: string
+  type: 'text' | 'voice' | 'video'
+}
+
 export default function ServerSettingsModal({
   serverId,
   onClose,
@@ -40,6 +47,7 @@ export default function ServerSettingsModal({
 
   const [server, setServer] = useState<Server | null>(null)
   const [members, setMembers] = useState<Member[]>([])
+  const [channels, setChannels] = useState<Channel[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserRole, setCurrentUserRole] = useState<string>('')
 
@@ -47,7 +55,7 @@ export default function ServerSettingsModal({
   const [iconUrl, setIconUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'roles'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'channels' | 'members' | 'roles'>('general')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -99,6 +107,14 @@ export default function ServerSettingsModal({
       setIconUrl(serverData.icon_url)
     }
 
+    const { data: channelsData } = await supabase
+      .from('channels')
+      .select('id, name, type')
+      .eq('server_id', serverId)
+      .order('created_at', { ascending: true })
+
+    if (channelsData) setChannels(channelsData as Channel[])
+
     const { data: membersData } = await supabase
       .from('members')
       .select(`
@@ -116,6 +132,27 @@ export default function ServerSettingsModal({
       setMembers(membersData as unknown as Member[])
       const me = membersData.find(m => m.user_id === user.id)
       setCurrentUserRole(me?.role ?? '')
+    }
+  }
+
+  const handleDeleteChannel = async (channelId: string, channelName: string) => {
+    if (!confirm(`¿Seguro que querés eliminar el canal #${channelName}?`)) return
+    setActionLoading(`channel-${channelId}`)
+
+    try {
+      const res = await fetch(`/api/channels/${channelId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setSuccess(`Canal #${channelName} eliminado con éxito`)
+        setChannels(prev => prev.filter(c => c.id !== channelId))
+        window.dispatchEvent(new CustomEvent('channels-updated'))
+      } else {
+        setError('No se pudo eliminar el canal')
+      }
+    } catch (err) {
+      console.error(err)
+      setError('Error al procesar la solicitud')
+    } finally {
+      setActionLoading(null)
     }
   }
 
@@ -142,7 +179,6 @@ export default function ServerSettingsModal({
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // NUEVO: Función para remover permanentemente el icono del servidor
   const handleRemoveIcon = async () => {
     if (!confirm('¿Seguro de que querés quitar el icono del servidor?')) return
     setUploading(true)
@@ -256,6 +292,7 @@ export default function ServerSettingsModal({
 
   const tabs = [
     { id: 'general', label: 'General' },
+    { id: 'channels', label: `Canales (${channels.length})` },
     { id: 'members', label: `Miembros (${members.length})` },
     { id: 'roles', label: 'Roles' },
   ] as const
@@ -308,12 +345,12 @@ export default function ServerSettingsModal({
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-6 pt-4">
+        <div className="flex gap-1 px-6 pt-4 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => { setActiveTab(tab.id); setError(null); setSuccess(null) }}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'bg-indigo-600 text-white'
                   : 'text-gray-400 hover:text-white'
@@ -362,7 +399,6 @@ export default function ServerSettingsModal({
                 <div className="text-sm text-gray-400 flex-1">
                   <p className="font-medium text-white mb-1">Icono del servidor</p>
                   <p>Recomendado: 512x512px (Máx: 2MB)</p>
-                  {/* NUEVO: Botón para quitar el icono */}
                   {iconUrl && canManage && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleRemoveIcon() }}
@@ -508,6 +544,58 @@ export default function ServerSettingsModal({
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab Canales */}
+          {activeTab === 'channels' && (
+            <div className="flex flex-col gap-2.5">
+              {channels.map((channel) => {
+                const isDeleting = actionLoading === `channel-${channel.id}`
+
+                return (
+                  <div
+                    key={channel.id}
+                    className="flex items-center justify-between px-4 py-3 rounded-lg bg-gray-700/40 border border-gray-700/50"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {/* MODIFICADO: Mapeo dinámico usando componentes nativos de Lucide en vez de strings/emojis */}
+                      <span className="text-gray-400 shrink-0 select-none">
+                        {channel.type === 'voice' ? (
+                          <Volume2 size={16} />
+                        ) : channel.type === 'video' ? (
+                          <Video size={16} />
+                        ) : (
+                          <Hash size={16} />
+                        )}
+                      </span>
+                      <span className="text-sm font-medium text-gray-200 truncate">
+                        {channel.name}
+                      </span>
+                    </div>
+
+                    {canManage && (
+                      <button
+                        onClick={() => handleDeleteChannel(channel.id, channel.name)}
+                        disabled={isDeleting}
+                        className="p-1.5 text-gray-400 hover:text-red-400 rounded hover:bg-gray-600/50 transition-colors cursor-pointer border-0 bg-transparent"
+                        title="Eliminar canal"
+                      >
+                        {isDeleting ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={16} />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+              {channels.length === 0 && (
+                <div className="text-center text-sm text-gray-400 py-6">
+                  Este servidor no tiene canales configurados.
                 </div>
               )}
             </div>

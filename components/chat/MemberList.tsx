@@ -8,7 +8,7 @@ import UserProfilePopup from '@/components/ui/UserProfilePopup'
 
 type Member = {
   role: string
-  nickname: string | null // NUEVO: Capturar apodo local
+  nickname: string | null 
   profiles: {
     id: string
     username: string

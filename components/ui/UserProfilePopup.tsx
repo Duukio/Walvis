@@ -228,7 +228,7 @@ export default function UserProfilePopup({
           </div>
         </div>
 
-        {/* ZONA MARCADA EN ROJO: Botón de Amistad alineado arriba a la derecha */}
+        {/*Botón de Amistad */}
         {!isMe && currentUserId && (
           <div className="mt-2">
             <button

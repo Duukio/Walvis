@@ -8,7 +8,7 @@ import { Pencil, Trash2, Check, X, Paperclip, Reply } from 'lucide-react'
 import Image from 'next/image'
 import StatusIndicator from '@/components/ui/StatusIndicator'
 import UserProfilePopup from '@/components/ui/UserProfilePopup'
-import { playSound } from '@/lib/utils/sound' // <-- IMPORTAMOS EL HELPER DE SONIDO
+import { playSound } from '@/lib/utils/sound'
 
 type Message = {
   id: string
