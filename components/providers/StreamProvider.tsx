@@ -93,10 +93,13 @@ export default function StreamProvider({
       if (joiningChannelId.current !== channelId) return null
 
       // Instanciamos la llamada de forma limpia
-      const newCall = client.call('default', channelId)
+      const newCall = client.call('audio_room', channelId)
       
       // Unirse a la llamada en los servidores de Stream
       await newCall.join({ create: true })
+
+      console.log(Object.keys(newCall.microphone))
+      console.dir(newCall.microphone)
 
       // IMPORTANTE: Habilitamos el hardware de micrófono INMEDIATAMENTE después de un join exitoso
       try {
