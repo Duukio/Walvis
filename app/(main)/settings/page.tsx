@@ -1,16 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/components/providers/ThemeProvider'
-import { ArrowLeft, Save, Loader2 } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Camera } from 'lucide-react'
 
 type Profile = {
   username: string
   nickname_color: string
   theme: string
   bio: string | null
+  dm_bg_url: string | null
 }
 
 type ServerMember = {
@@ -35,9 +36,11 @@ export default function SettingsPage() {
   const [username, setUsername] = useState('')
   const [nicknameColor, setNicknameColor] = useState('#ffffff')
   const [theme, setTheme] = useState('dark')
-  const [bio, setBio] = useState('') // Estado para la Bio
+  const [bio, setBio] = useState('') 
   
-  // Estados para manejar los apodos por servidor
+  const [dmBgUrl, setDmBgUrl] = useState<string | null>(null)
+  const dmBgInputRef = useRef<HTMLInputElement>(null)
+  
   const [myServers, setMyServers] = useState<ServerMember[]>([])
   const [selectedServerId, setSelectedServerId] = useState<string>('')
   const [nickname, setNickname] = useState('')
@@ -54,15 +57,14 @@ export default function SettingsPage() {
     fetchProfileAndServers()
   }, [])
 
-  // Carga inicial del perfil global y los servidores a los que pertenece
   const fetchProfileAndServers = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    // Traer perfil incluyendo la nueva columna 'bio'
+    //Agregado dm_bg_url al select
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('username, nickname_color, theme, bio')
+      .select('username, nickname_color, theme, bio, dm_bg_url')
       .eq('id', user.id)
       .single()
 
@@ -71,9 +73,10 @@ export default function SettingsPage() {
       setNicknameColor(profileData.nickname_color ?? '#ffffff')
       setTheme(profileData.theme ?? 'dark')
       setBio(profileData.bio ?? '')
+      // NUEVO: Seteamos el estado del fondo de DMs
+      setDmBgUrl(profileData.dm_bg_url ?? null)
     }
 
-    // Traer la lista de servidores donde el usuario es miembro junto con su apodo actual
     const { data: serversData } = await supabase
       .from('members')
       .select(`
@@ -84,7 +87,6 @@ export default function SettingsPage() {
       .eq('user_id', user.id)
 
     if (serversData && serversData.length > 0) {
-      // Normalizamos el mapeo por si Supabase anida la relación como un array u objeto simple
       const formatted: ServerMember[] = serversData.map((s: any) => ({
         server_id: s.server_id,
         nickname: s.nickname,
@@ -97,7 +99,37 @@ export default function SettingsPage() {
     }
   }
 
-  // Detecta el cambio en el select de servidores para actualizar el input del apodo
+  // Handler de subida del fondo de DMs
+  const handleDmBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 8 * 1024 * 1024) { 
+      alert('Máximo 8MB')
+      return 
+    }
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const ext = file.name.split('.').pop()
+    const path = `${user.id}/dm-bg-${Date.now()}.${ext}`
+
+    const { error } = await supabase.storage
+      .from('backgrounds')
+      .upload(path, file, { upsert: true })
+
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage
+        .from('backgrounds')
+        .getPublicUrl(path)
+      
+      setDmBgUrl(publicUrl)
+    }
+
+    if (dmBgInputRef.current) dmBgInputRef.current.value = ''
+  }
+
   const handleServerChange = (serverId: string) => {
     setSelectedServerId(serverId)
     const target = myServers.find(s => s.server_id === serverId)
@@ -115,10 +147,16 @@ export default function SettingsPage() {
       return
     }
 
-    // 1. Guardar cambios globales del perfil (incluye la Bio)
+    //dm_bg_url al update
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({ username, nickname_color: nicknameColor, theme, bio: bio.trim() })
+      .update({ 
+        username, 
+        nickname_color: nicknameColor, 
+        theme, 
+        bio: bio.trim(),
+        dm_bg_url: dmBgUrl 
+      })
       .eq('id', user.id)
 
     if (profileError) {
@@ -127,7 +165,6 @@ export default function SettingsPage() {
       return
     }
 
-    // 2. Guardar el apodo local si hay un servidor seleccionado (Cambiado a UPSERT seguro)
     if (selectedServerId) {
       const currentNicknameValue = nickname.trim() || null
 
@@ -147,7 +184,6 @@ export default function SettingsPage() {
         return
       }
 
-      // Actualizar el estado local de los servidores para que refleje el cambio de inmediato
       setMyServers(prev => prev.map(s => 
         s.server_id === selectedServerId ? { ...s, nickname: currentNicknameValue } : s
       ))
@@ -401,6 +437,42 @@ export default function SettingsPage() {
                   ☀️ Claro
                 </button>
               </div>
+            </div>
+
+            {/*Contenedor para el Fondo de DMs */}
+            <div>
+              <label className="text-gray-300 text-xs font-semibold uppercase tracking-wide mb-2 block">
+                Fondo de mensajes directos
+              </label>
+              <div
+                className="relative h-24 rounded-lg cursor-pointer group overflow-hidden border border-gray-700"
+                style={{
+                  backgroundColor: '#374151',
+                  backgroundImage: dmBgUrl ? `url(${dmBgUrl})` : undefined,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+                onClick={() => dmBgInputRef.current?.click()}
+              >
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Camera size={20} className="text-white" />
+                </div>
+                <input
+                  ref={dmBgInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleDmBgChange}
+                  className="hidden"
+                />
+              </div>
+              {dmBgUrl && (
+                <button
+                  onClick={() => setDmBgUrl(null)}
+                  className="text-xs text-red-400 hover:text-red-300 mt-1 transition-colors"
+                >
+                  Quitar fondo
+                </button>
+              )}
             </div>
 
             <button
