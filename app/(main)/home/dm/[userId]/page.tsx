@@ -37,6 +37,7 @@ export default function DMPage({ params }: Props) {
   const [content, setContent] = useState('')
   const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [dmBgUrl, setDmBgUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const init = async () => {
@@ -56,6 +57,17 @@ export default function DMPage({ params }: Props) {
       const res = await fetch(`/api/dm?receiver_id=${userId}`)
       const data = await res.json()
       if (data.messages) setMessages(data.messages)
+
+      // NUEVO: Cargar el fondo de DM del usuario actual
+      const { data: myProfile } = await supabase
+        .from('profiles')
+        .select('dm_bg_url')
+        .eq('id', user.id)
+        .single()
+      
+      if (myProfile?.dm_bg_url) {
+        setDmBgUrl(myProfile.dm_bg_url)
+      }
     }
     init()
   }, [userId])
@@ -101,63 +113,76 @@ export default function DMPage({ params }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-
-
   const handleDelete = async (id: string) => {
     await supabase.from('direct_messages').delete().eq('id', id)
   }
-  
 
   return (
-    <div className="flex flex-col h-full bg-gray-700">
-      {/* Header */}
-      <div className="h-12 px-4 flex items-center gap-3 border-b border-gray-600 shrink-0">
-        {contact && (
-          <>
-            <div className="relative">
-              <div className="w-8 h-8 rounded-full overflow-hidden">
-                {contact.avatar_url ? (
-                  <Image src={contact.avatar_url} alt={contact.username} width={32} height={32} className="object-cover w-full h-full" />
-                ) : (
-                  <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-                    {contact.username.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-              </div>
-              <div className="absolute -bottom-0.5 -right-0.5 border-2 border-gray-700 rounded-full">
-                <StatusIndicator userId={contact.id} initialStatus={contact.status} size="sm" />
-              </div>
-            </div>
-            <span className="text-white font-semibold text-sm" style={{ color: contact.nickname_color ?? undefined }}>
-              {contact.username}
-            </span>
-          </>
-        )}
-      </div>
+    /* MODIFICADO: Añadimos la clase 'relative' y los estilos inline para el fondo si existe */
+    <div 
+      className="flex flex-col h-full bg-gray-700 relative overflow-hidden"
+      style={dmBgUrl ? {
+        backgroundImage: `url(${dmBgUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      } : {}}
+    >
+      {/* NUEVO: Capa oscura por encima del fondo para asegurar el contraste de las letras */}
+      {dmBgUrl && <div className="absolute inset-0 bg-gray-900/60 pointer-events-none z-0" />}
 
-      {/* Mensajes */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-1">
-        {messages.length === 0 && (
-          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-            Empezá una conversación con {contact?.username}
-          </div>
-        )}
-        {messages.map((msg) => (
-          <DMMessage
-            key={msg.id}
-            message={msg}
-            isOwn={msg.sender_id === currentUserId}
-            onDelete={handleDelete}
-          />
-        ))}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input */}
-      <div>
-        <MessageInput receiverId={userId} />
+      {/* MODIFICADO: Envolvemos toda la estructura interna en un div con z-10 para flotar sobre el fondo */}
+      <div className="relative z-10 flex flex-col h-full">
+        
+        {/* Header (Agregado un leve fondo oscuro translúcido para que no se pierda con el fondo de atrás) */}
+        <div className="h-12 px-4 flex items-center gap-3 border-b border-gray-600 shrink-0 bg-gray-900/25 backdrop-blur-xs">
+          {contact && (
+            <>
+              <div className="relative">
+                <div className="w-8 h-8 rounded-full overflow-hidden">
+                  {contact.avatar_url ? (
+                    <Image src={contact.avatar_url} alt={contact.username} width={32} height={32} className="object-cover w-full h-full" />
+                  ) : (
+                    <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+                      {contact.username.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 border-2 border-gray-700 rounded-full">
+                  <StatusIndicator userId={contact.id} initialStatus={contact.status} size="sm" />
+                </div>
+              </div>
+              <span className="text-white font-semibold text-sm" style={{ color: contact.nickname_color ?? undefined }}>
+                {contact.username}
+              </span>
+            </>
+          )}
         </div>
+
+        {/* Mensajes */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-1">
+          {messages.length === 0 && (
+            <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+              Empezá una conversación con {contact?.username}
+            </div>
+          )}
+          {messages.map((msg) => (
+            <DMMessage
+              key={msg.id}
+              message={msg}
+              isOwn={msg.sender_id === currentUserId}
+              onDelete={handleDelete}
+            />
+          ))}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input */}
+        <div className="bg-gray-900/10 backdrop-blur-xs">
+          <MessageInput receiverId={userId} />
+        </div>
+        
       </div>
+    </div>
   )
 }
 
@@ -199,14 +224,13 @@ function DMMessage({
             {formatDistanceToNow(new Date(message.created_at), { addSuffix: true, locale: es })}
           </span>
         </div>
-        <p className="text-gray-200 text-sm break-words">{message.content}</p>
+        <p className="text-gray-200 text-sm wrap-break-word">{message.content}</p>
 
         {message.attachments && message.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-1">
             {message.attachments.map((att: any, i: number) => (
               <div key={i}>
                 {att.type === 'image' || att.type === 'gif' ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={att.url}
                     alt={att.name}
@@ -218,7 +242,7 @@ function DMMessage({
                     className="flex items-center gap-2 bg-gray-600 rounded px-3 py-2 text-sm text-gray-200 hover:bg-gray-500"
                   >
                     <Paperclip size={14} />
-                    <span className="max-w-[200px] truncate">{att.name}</span>
+                    <span className="max-w-200px truncate">{att.name}</span>
                   </a>
                 )}
               </div>
