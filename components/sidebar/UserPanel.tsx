@@ -3,10 +3,12 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Settings, LogOut, ChevronDown, Camera } from 'lucide-react'
+import { Settings, LogOut, ChevronDown, Camera, PhoneOff, Volume2 } from 'lucide-react'
 import Image from 'next/image'
 import NotificationBell from '@/components/notifications/NotificationBell'
 import { useCall } from '@stream-io/video-react-sdk'
+import { useCallContext } from '@/components/providers/CallProvider'
+import { useStreamContext } from '@/components/providers/StreamProvider'
 
 
 type Profile = {
@@ -38,6 +40,8 @@ export default function UserPanel() {
   const [showStatus, setShowStatus] = useState(false)
   const [uploading, setUploading] = useState(false)
   const call = useCall()
+  const { activeDMCall, endCall } = useCallContext()
+  const { activeCall, leaveVoiceChannel } = useStreamContext()
 
   useEffect(() => {
     fetchProfile()
@@ -239,7 +243,32 @@ const handleBannerChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         <p className="text-white font-semibold mt-2">{profile?.username ?? '...'}</p>
       </div>
 
-      <div className="flex flex-col px-4 gap-4" ref={menuRef}>
+      <div className="flex flex-col px-4 gap-3" ref={menuRef}>
+        {/* Widget de Llamada Activa */}
+        {(activeDMCall || activeCall) && (
+          <div className="bg-green-950/40 border border-green-700/50 rounded-lg p-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <Volume2 size={16} className="text-green-400 shrink-0 animate-pulse" />
+              <div className="flex flex-col min-w-0">
+                <span className="text-green-400 font-medium text-xs truncate">Voz Conectada</span>
+                <span className="text-gray-400 text-[11px] truncate">
+                  {activeDMCall ? activeDMCall.targetUser.username : 'Canal de voz'}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (activeDMCall) endCall()
+                else leaveVoiceChannel()
+              }}
+              className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-md transition-colors shrink-0"
+              title="Desconectar"
+            >
+              <PhoneOff size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Selector de estado */}
         <div className="relative w-full">
           <button

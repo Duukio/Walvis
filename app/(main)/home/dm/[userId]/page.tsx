@@ -4,10 +4,12 @@ import { use, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Pencil, Trash2, Check, X, Paperclip, SendHorizonal, Smile } from 'lucide-react'
+import { Pencil, Trash2, Check, X, Paperclip, SendHorizonal, Smile, Phone, Video } from 'lucide-react'
 import Image from 'next/image'
 import StatusIndicator from '@/components/ui/StatusIndicator'
 import MessageInput from '@/components/chat/MessageInput'
+import { useCallContext } from '@/components/providers/CallProvider'
+import DMVoiceCall from '@/components/dm/DMVoiceCall'
 
 type DM = {
   id: string
@@ -31,6 +33,7 @@ type Props = {
 export default function DMPage({ params }: Props) {
   const { userId } = use(params)
   const supabase = createClient()
+  const { startCall, activeDMCall } = useCallContext()
   const [messages, setMessages] = useState<DM[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [contact, setContact] = useState<any>(null)
@@ -133,30 +136,55 @@ export default function DMPage({ params }: Props) {
       {/* MODIFICADO: Envolvemos toda la estructura interna en un div con z-10 para flotar sobre el fondo */}
       <div className="relative z-10 flex flex-col h-full">
         
-        {/* Header (Agregado un leve fondo oscuro translúcido para que no se pierda con el fondo de atrás) */}
-        <div className="h-12 px-4 flex items-center gap-3 border-b border-gray-600 shrink-0 bg-gray-900/25 backdrop-blur-xs">
+        {/* Header */}
+        <div className="h-12 px-4 flex items-center justify-between border-b border-gray-600 shrink-0 bg-gray-900/25 backdrop-blur-xs">
           {contact && (
             <>
-              <div className="relative">
-                <div className="w-8 h-8 rounded-full overflow-hidden">
-                  {contact.avatar_url ? (
-                    <Image src={contact.avatar_url} alt={contact.username} width={32} height={32} className="object-cover w-full h-full" />
-                  ) : (
-                    <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-                      {contact.username.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className="w-8 h-8 rounded-full overflow-hidden">
+                    {contact.avatar_url ? (
+                      <Image src={contact.avatar_url} alt={contact.username} width={32} height={32} className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+                        {contact.username.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute -bottom-0.5 -right-0.5 border-2 border-gray-700 rounded-full">
+                    <StatusIndicator userId={contact.id} initialStatus={contact.status} size="sm" />
+                  </div>
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 border-2 border-gray-700 rounded-full">
-                  <StatusIndicator userId={contact.id} initialStatus={contact.status} size="sm" />
-                </div>
+                <span className="text-white font-semibold text-sm" style={{ color: contact.nickname_color ?? undefined }}>
+                  {contact.username}
+                </span>
               </div>
-              <span className="text-white font-semibold text-sm" style={{ color: contact.nickname_color ?? undefined }}>
-                {contact.username}
-              </span>
+
+              {/* Botones de Llamada */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => contact && startCall(contact, false)}
+                  className="p-1.5 text-gray-300 hover:text-green-400 hover:bg-gray-700/60 rounded-lg transition-colors"
+                  title="Iniciar llamada de voz"
+                >
+                  <Phone size={18} />
+                </button>
+                <button
+                  onClick={() => contact && startCall(contact, true)}
+                  className="p-1.5 text-gray-300 hover:text-green-400 hover:bg-gray-700/60 rounded-lg transition-colors"
+                  title="Iniciar videollamada"
+                >
+                  <Video size={18} />
+                </button>
+              </div>
             </>
           )}
         </div>
+
+        {/* Llamada Activa si existe */}
+        {activeDMCall && activeDMCall.targetUser.id === userId && (
+          <DMVoiceCall targetUser={activeDMCall.targetUser} isVideo={activeDMCall.isVideo} />
+        )}
 
         {/* Mensajes */}
         <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-1">
